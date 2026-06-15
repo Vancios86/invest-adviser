@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Brain, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,9 +37,10 @@ import { cn } from "@/lib/utils";
 type HoldingsTableProps = {
   holdings: HoldingWithQuote[];
   onChanged: () => void;
+  onAnalyze: (holding: HoldingWithQuote) => void;
 };
 
-export function HoldingsTable({ holdings, onChanged }: HoldingsTableProps) {
+export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableProps) {
   const [editing, setEditing] = useState<HoldingWithQuote | null>(null);
   const [symbol, setSymbol] = useState("");
   const [shares, setShares] = useState("");
@@ -192,6 +193,14 @@ export function HoldingsTable({ holdings, onChanged }: HoldingsTableProps) {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => onAnalyze(holding)}
+                          aria-label={`Analyze ${holding.symbol}`}
+                        >
+                          <Brain className="size-4" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon-sm"

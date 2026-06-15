@@ -14,6 +14,7 @@ type PortfolioBubbleChartProps = {
   bubbles: AggregatedBubble[];
   width?: number;
   height?: number;
+  onAnalyze?: (symbol: string) => void;
 };
 
 type PackedNode = {
@@ -147,6 +148,7 @@ export function PortfolioBubbleChart({
   bubbles,
   width = 800,
   height = CHART_HEIGHT,
+  onAnalyze,
 }: PortfolioBubbleChartProps) {
   const [tooltip, setTooltip] = useState<TooltipState>(null);
   const filterId = useId().replace(/:/g, "");
@@ -307,6 +309,7 @@ export function PortfolioBubbleChart({
                     })
                   }
                   onMouseLeave={() => setTooltip(null)}
+                  onClick={() => onAnalyze?.(bubble.symbol)}
                   className="cursor-pointer"
                 >
                   <defs>

@@ -15,4 +15,17 @@ model Holding {
   purchaseDate  DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  reports       AnalysisReport[]
+}
+
+model AnalysisReport {
+  id               String   @id @default(cuid())
+  symbol           String
+  holdingId        String?
+  holding          Holding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  recommendation   String
+  confidence       Float
+  executiveSummary String
+  agentOutputs     String
+  createdAt        DateTime @default(now())
 }

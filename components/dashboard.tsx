@@ -7,6 +7,7 @@ import { AddStockForm } from "@/components/add-stock-form";
 import { HoldingsTable } from "@/components/holdings-table";
 import { PortfolioBubbleChart } from "@/components/portfolio-bubble-chart";
 import { PortfolioSummary } from "@/components/portfolio-summary";
+import { StockAnalysisPanel } from "@/components/stock-analysis-panel";
 import { Button } from "@/components/ui/button";
 import {
   aggregateBySymbol,
@@ -14,7 +15,7 @@ import {
   enrichHoldings,
 } from "@/lib/portfolio";
 import type { Holding } from "@/lib/generated/prisma/client";
-import type { QuotesMap } from "@/lib/types";
+import type { HoldingWithQuote, QuotesMap } from "@/lib/types";
 
 const QUOTE_REFRESH_MS = 5 * 60 * 1000;
 
@@ -24,6 +25,17 @@ export function Dashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  const [analysisSymbol, setAnalysisSymbol] = useState<string | null>(null);
+  const [analysisHolding, setAnalysisHolding] = useState<HoldingWithQuote | null>(
+    null,
+  );
+
+  function openAnalysis(symbol: string, holding?: HoldingWithQuote) {
+    setAnalysisSymbol(symbol);
+    setAnalysisHolding(holding ?? null);
+    setAnalysisOpen(true);
+  }
 
   const loadQuotes = useCallback(async (symbols: string[]) => {
     if (symbols.length === 0) {
@@ -203,11 +215,22 @@ export function Dashboard() {
 
       <AddStockForm onAdded={() => void refresh(false)} />
 
-      <PortfolioBubbleChart bubbles={bubbles} />
+      <PortfolioBubbleChart
+        bubbles={bubbles}
+        onAnalyze={(symbol) => openAnalysis(symbol)}
+      />
 
       <HoldingsTable
         holdings={enrichedHoldings}
         onChanged={() => void refresh(false)}
+        onAnalyze={(holding) => openAnalysis(holding.symbol, holding)}
+      />
+
+      <StockAnalysisPanel
+        open={analysisOpen}
+        onOpenChange={setAnalysisOpen}
+        symbol={analysisSymbol}
+        holding={analysisHolding}
       />
     </div>
   );
