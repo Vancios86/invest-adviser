@@ -1,0 +1,273 @@
+"use client";
+
+import { useState } from "react";
+import { Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  formatCurrency,
+  formatPercent,
+} from "@/lib/portfolio";
+import type { HoldingWithQuote } from "@/lib/types";
+import { cn } from "@/lib/utils";
+
+type HoldingsTableProps = {
+  holdings: HoldingWithQuote[];
+  onChanged: () => void;
+};
+
+export function HoldingsTable({ holdings, onChanged }: HoldingsTableProps) {
+  const [editing, setEditing] = useState<HoldingWithQuote | null>(null);
+  const [symbol, setSymbol] = useState("");
+  const [shares, setShares] = useState("");
+  const [purchasePrice, setPurchasePrice] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  function openEdit(holding: HoldingWithQuote) {
+    setEditing(holding);
+    setSymbol(holding.symbol);
+    setShares(String(holding.shares));
+    setPurchasePrice(String(holding.purchasePrice));
+  }
+
+  function closeEdit() {
+    setEditing(null);
+    setSymbol("");
+    setShares("");
+    setPurchasePrice("");
+  }
+
+  async function handleSave() {
+    if (!editing) return;
+    setIsSaving(true);
+
+    try {
+      const response = await fetch(`/api/holdings/${editing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol,
+          shares: Number(shares),
+          purchasePrice: Number(purchasePrice),
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to update holding");
+      }
+
+      toast.success(`${data.symbol} updated`);
+      closeEdit();
+      onChanged();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to update holding",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleDelete(id: string, symbolName: string) {
+    setDeletingId(id);
+
+    try {
+      const response = await fetch(`/api/holdings/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error ?? "Failed to delete holding");
+      }
+
+      toast.success(`${symbolName} removed`);
+      onChanged();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete holding",
+      );
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
+  if (holdings.length === 0) {
+    return null;
+  }
+
+  return (
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Holdings</CardTitle>
+        </CardHeader>
+        <CardContent className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Symbol</TableHead>
+                <TableHead className="text-right">Shares</TableHead>
+                <TableHead className="text-right">Purchase</TableHead>
+                <TableHead className="text-right">Live</TableHead>
+                <TableHead className="text-right">Value</TableHead>
+                <TableHead className="text-right">Weight</TableHead>
+                <TableHead className="text-right">Gain/Loss</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {holdings.map((holding) => {
+                const hasQuote = holding.livePrice !== null;
+
+                return (
+                  <TableRow key={holding.id}>
+                    <TableCell className="font-medium">
+                      <div>{holding.symbol}</div>
+                      {holding.companyName && (
+                        <div className="text-xs font-normal text-muted-foreground">
+                          {holding.companyName}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {holding.shares}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(holding.purchasePrice)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {hasQuote
+                        ? formatCurrency(holding.livePrice!)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {holding.currentValue !== null
+                        ? formatCurrency(holding.currentValue)
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {holding.portfolioWeight !== null
+                        ? `${holding.portfolioWeight.toFixed(1)}%`
+                        : "—"}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium",
+                        !hasQuote && "text-muted-foreground",
+                        hasQuote &&
+                          (holding.isPositive
+                            ? "text-green-500"
+                            : "text-red-500"),
+                      )}
+                    >
+                      {holding.gainLossPct !== null
+                        ? formatPercent(holding.gainLossPct)
+                        : "No quote"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => openEdit(holding)}
+                          aria-label={`Edit ${holding.symbol}`}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() =>
+                            handleDelete(holding.id, holding.symbol)
+                          }
+                          disabled={deletingId === holding.id}
+                          aria-label={`Delete ${holding.symbol}`}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={Boolean(editing)} onOpenChange={(open) => !open && closeEdit()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit holding</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-symbol">Symbol</Label>
+              <Input
+                id="edit-symbol"
+                value={symbol}
+                onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-shares">Shares</Label>
+              <Input
+                id="edit-shares"
+                type="number"
+                min="0"
+                step="any"
+                value={shares}
+                onChange={(e) => setShares(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-purchasePrice">Purchase price</Label>
+              <Input
+                id="edit-purchasePrice"
+                type="number"
+                min="0"
+                step="any"
+                value={purchasePrice}
+                onChange={(e) => setPurchasePrice(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEdit}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
