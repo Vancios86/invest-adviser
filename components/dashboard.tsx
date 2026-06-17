@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { AddStockForm } from "@/components/add-stock-form";
 import { HoldingsTable } from "@/components/holdings-table";
 import { PortfolioBubbleChart } from "@/components/portfolio-bubble-chart";
+import { PortfolioCategoryPie } from "@/components/portfolio-category-pie";
 import { PortfolioSummary } from "@/components/portfolio-summary";
 import { StockAnalysisPanel } from "@/components/stock-analysis-panel";
 import { Button } from "@/components/ui/button";
@@ -23,6 +24,9 @@ export function Dashboard() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [quotes, setQuotes] = useState<QuotesMap>({});
   const [eurUsdRate, setEurUsdRate] = useState<number | null>(null);
+  const [categoryMeta, setCategoryMeta] = useState<
+    Record<string, { sector: string | null; industry: string | null; companyName: string | null }>
+  >({});
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,13 +46,16 @@ export function Dashboard() {
     if (symbols.length === 0) {
       setQuotes({});
       setEurUsdRate(null);
+      setCategoryMeta({});
       return;
     }
 
     const uniqueSymbols = [...new Set(symbols.map((s) => s.toUpperCase()))];
-    const response = await fetch(
-      `/api/quotes?symbols=${encodeURIComponent(uniqueSymbols.join(","))}`,
-    );
+    const [response, fxResponse, categoriesResponse] = await Promise.all([
+      fetch(`/api/quotes?symbols=${encodeURIComponent(uniqueSymbols.join(","))}`),
+      fetch("/api/fx"),
+      fetch(`/api/categories?symbols=${encodeURIComponent(uniqueSymbols.join(","))}`),
+    ]);
 
     if (!response.ok) {
       const body = (await response.json().catch(() => null)) as {
@@ -62,10 +69,17 @@ export function Dashboard() {
     const data = (await response.json()) as QuotesMap;
     setQuotes(data);
 
-    const fxResponse = await fetch("/api/fx");
     if (fxResponse.ok) {
       const fx = (await fxResponse.json()) as { eurUsd: number | null };
       setEurUsdRate(fx.eurUsd);
+    }
+
+    if (categoriesResponse.ok) {
+      const categories = (await categoriesResponse.json()) as Record<
+        string,
+        { sector: string | null; industry: string | null; companyName: string | null }
+      >;
+      setCategoryMeta(categories);
     }
   }, []);
 
@@ -223,6 +237,14 @@ export function Dashboard() {
 
       <AddStockForm onAdded={() => void refresh(false)} />
 
+      {holdings.length > 0 && (
+        <PortfolioCategoryPie
+          holdings={enrichedHoldings}
+          eurUsdRate={eurUsdRate}
+          metadataBySymbol={categoryMeta}
+        />
+      )}
+
       <PortfolioBubbleChart
         bubbles={bubbles}
         onAnalyze={(symbol) => openAnalysis(symbol)}
@@ -231,6 +253,7 @@ export function Dashboard() {
       <HoldingsTable
         holdings={enrichedHoldings}
         eurUsdRate={eurUsdRate}
+        metadataBySymbol={categoryMeta}
         onChanged={() => void refresh(false)}
         onAnalyze={(holding) => openAnalysis(holding.symbol, holding)}
       />

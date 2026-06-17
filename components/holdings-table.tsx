@@ -34,6 +34,10 @@ import {
 import type { AssetType, HoldingWithQuote, PortfolioCurrency } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { convertAmount } from "@/lib/currency-utils";
+import {
+  CATEGORY_COLORS,
+  categorizeHolding,
+} from "@/lib/industry-categories";
 
 const CURRENCY_OPTIONS: { value: PortfolioCurrency; label: string }[] = [
   { value: "USD", label: "USD ($)" },
@@ -50,6 +54,10 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
 type HoldingsTableProps = {
   holdings: HoldingWithQuote[];
   eurUsdRate: number | null;
+  metadataBySymbol: Record<
+    string,
+    { sector: string | null; industry: string | null; companyName: string | null }
+  >;
   onChanged: () => void;
   onAnalyze: (holding: HoldingWithQuote) => void;
 };
@@ -57,6 +65,7 @@ type HoldingsTableProps = {
 export function HoldingsTable({
   holdings,
   eurUsdRate,
+  metadataBySymbol,
   onChanged,
   onAnalyze,
 }: HoldingsTableProps) {
@@ -131,6 +140,22 @@ export function HoldingsTable({
     }
 
     return formatCurrency(holding.currentValue, holding.quoteCurrency);
+  }
+
+  function getIndustryColor(holding: HoldingWithQuote): string {
+    const meta =
+      metadataBySymbol[(holding.quoteSymbol ?? holding.symbol).toUpperCase()] ??
+      metadataBySymbol[holding.symbol.toUpperCase()];
+
+    const category = categorizeHolding({
+      assetType: (holding.assetType as AssetType) ?? "stock",
+      symbol: holding.symbol,
+      sector: meta?.sector ?? null,
+      industry: meta?.industry ?? null,
+      companyName: meta?.companyName ?? holding.companyName ?? null,
+    });
+
+    return CATEGORY_COLORS[category];
   }
 
   function openEdit(holding: HoldingWithQuote) {
@@ -242,6 +267,11 @@ export function HoldingsTable({
                   <TableRow key={holding.id}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-sm border"
+                          style={{ backgroundColor: getIndustryColor(holding) }}
+                          aria-hidden="true"
+                        />
                         <span>{holding.symbol}</span>
                         <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                           {ASSET_TYPE_LABELS[(holding.assetType as AssetType) ?? "stock"]}
