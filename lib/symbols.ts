@@ -111,6 +111,32 @@ async function fetchQuote(symbol: string): Promise<YahooQuoteResult | null> {
   }
 }
 
+function looksLikeUcitsListing(candidate: SearchQuote): boolean {
+  const name = `${candidate.longname ?? ""} ${candidate.shortname ?? ""}`.toLowerCase();
+  if (!name.includes("ucits")) return false;
+  const symbol = candidate.symbol?.toUpperCase() ?? "";
+  if (!symbol) return false;
+  return /\.(DE|F|L|PA|SW|AS|MI|IR)$/.test(symbol);
+}
+
+function scoreUcitsCandidate(inputSymbol: string, candidate: SearchQuote): number {
+  const symbol = candidate.symbol?.toUpperCase() ?? "";
+  const name = `${candidate.longname ?? ""} ${candidate.shortname ?? ""}`.toLowerCase();
+  let score = 0;
+
+  if (symbol.startsWith(`${inputSymbol}.`)) score += 100;
+  else if (symbol.includes(inputSymbol)) score += 50;
+
+  if (name.includes("vaneck")) score += 25;
+  if (name.includes("gold") && name.includes("miner")) score += 25;
+  if (name.includes("ucits")) score += 50;
+
+  if (/\.(DE|MI|PA|AS|SW|L)$/.test(symbol)) score += 10;
+  if (candidate.exchange === "GER") score += 15;
+
+  return score;
+}
+
 export async function resolveQuoteSymbol(
   input: string,
   assetType: AssetType = "stock",
@@ -120,6 +146,85 @@ export async function resolveQuoteSymbol(
 
   const direct = await fetchQuote(normalized);
   if (direct?.symbol) {
+    if (assetType === "etf" && !normalized.includes(".")) {
+      try {
+        const baseName = `${direct.longName ?? direct.shortName ?? ""}`
+          .replace(/\bETF\b/gi, "")
+          .replace(/\bETFS\b/gi, "")
+          .replace(/\bFUND\b/gi, "")
+          .replace(/\s+/g, " ")
+          .trim();
+
+        const searchQueries = [
+          normalized,
+          `${baseName || normalized} UCITS`,
+          `${baseName || normalized} UCITS ETF`,
+          `${normalized} UCITS`,
+        ];
+
+        const allCandidates: { quote: SearchQuote; score: number }[] = [];
+
+        for (const query of searchQueries) {
+          const search = await yahooFinance.search(query, { quotesCount: 15 });
+          const ucitsCandidates = (search.quotes ?? [])
+            .filter((quote) => typeof quote?.symbol === "string")
+            .map((quote) => quote as SearchQuote)
+            .filter((quote) => looksLikeUcitsListing(quote))
+            .map((quote) => ({
+              quote,
+              score: scoreUcitsCandidate(normalized, quote),
+            }));
+
+          allCandidates.push(...ucitsCandidates);
+        }
+
+        const ranked = allCandidates
+          .sort((a, b) => b.score - a.score)
+          .map((entry) => entry.quote)
+          .filter((quote): quote is SearchQuote & { symbol: string } =>
+            typeof quote.symbol === "string" && quote.symbol.length > 0,
+          );
+
+        const seen = new Set<string>();
+        const uniqueSymbols = ranked
+          .map((q) => q.symbol!.toUpperCase())
+          .filter((sym) => (seen.has(sym) ? false : (seen.add(sym), true)))
+          .slice(0, 10);
+
+        let bestResolved: { quote: YahooQuoteResult; score: number } | null = null;
+        for (const sym of uniqueSymbols) {
+          const resolved = await fetchQuote(sym);
+          if (!resolved?.symbol) continue;
+
+          const base =
+            allCandidates.find(
+              (c) => c.quote.symbol?.toUpperCase() === sym.toUpperCase(),
+            )?.score ?? 0;
+
+          const currencyBonus =
+            resolved.currency === "EUR" ? 40 : resolved.currency === "USD" ? -10 : 0;
+
+          const totalScore = base + currencyBonus;
+          if (!bestResolved || totalScore > bestResolved.score) {
+            bestResolved = { quote: resolved, score: totalScore };
+          }
+        }
+
+        if (bestResolved) {
+          const resolved = bestResolved.quote;
+          return {
+            symbol: normalized,
+            quoteSymbol: resolved.symbol!.toUpperCase(),
+            assetType: inferAssetType(resolved, assetType),
+            companyName: resolved.shortName ?? resolved.longName ?? null,
+            currency: resolved.currency ?? null,
+          };
+        }
+      } catch {
+        // ignore search failures and fall back to the direct quote
+      }
+    }
+
     return {
       symbol: normalized.includes(".")
         ? normalized.split(".")[0]!

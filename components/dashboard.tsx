@@ -230,6 +230,7 @@ export function Dashboard() {
 
       <HoldingsTable
         holdings={enrichedHoldings}
+        eurUsdRate={eurUsdRate}
         onChanged={() => void refresh(false)}
         onAnalyze={(holding) => openAnalysis(holding.symbol, holding)}
       />

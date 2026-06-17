@@ -33,6 +33,7 @@ import {
 } from "@/lib/portfolio";
 import type { AssetType, HoldingWithQuote, PortfolioCurrency } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { convertAmount } from "@/lib/currency-utils";
 
 const CURRENCY_OPTIONS: { value: PortfolioCurrency; label: string }[] = [
   { value: "USD", label: "USD ($)" },
@@ -48,11 +49,17 @@ const ASSET_TYPE_LABELS: Record<AssetType, string> = {
 
 type HoldingsTableProps = {
   holdings: HoldingWithQuote[];
+  eurUsdRate: number | null;
   onChanged: () => void;
   onAnalyze: (holding: HoldingWithQuote) => void;
 };
 
-export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableProps) {
+export function HoldingsTable({
+  holdings,
+  eurUsdRate,
+  onChanged,
+  onAnalyze,
+}: HoldingsTableProps) {
   const [editing, setEditing] = useState<HoldingWithQuote | null>(null);
   const [symbol, setSymbol] = useState("");
   const [assetType, setAssetType] = useState<AssetType>("stock");
@@ -62,6 +69,69 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
   const [purchasePrice, setPurchasePrice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const sortedHoldings = [...holdings].sort((a, b) => {
+    const aWeight = a.portfolioWeight;
+    const bWeight = b.portfolioWeight;
+
+    if (aWeight === null && bWeight === null) return a.symbol.localeCompare(b.symbol);
+    if (aWeight === null) return 1;
+    if (bWeight === null) return -1;
+
+    if (bWeight !== aWeight) return bWeight - aWeight;
+    return a.symbol.localeCompare(b.symbol);
+  });
+
+  function shouldForceEur(holding: HoldingWithQuote): boolean {
+    return holding.symbol.toUpperCase() === "GDX";
+  }
+
+  function displayPurchasePrice(holding: HoldingWithQuote): string {
+    if (shouldForceEur(holding)) {
+      return formatCurrency(
+        convertAmount(
+          holding.purchasePrice,
+          holding.purchaseCurrency,
+          "EUR",
+          eurUsdRate,
+        ),
+        "EUR",
+      );
+    }
+
+    return formatCurrency(holding.purchasePrice, holding.purchaseCurrency);
+  }
+
+  function displayLivePrice(holding: HoldingWithQuote): string {
+    if (holding.livePrice === null) return "—";
+
+    if (shouldForceEur(holding)) {
+      return formatCurrency(
+        convertAmount(holding.livePrice, holding.quoteCurrency, "EUR", eurUsdRate),
+        "EUR",
+      );
+    }
+
+    return formatCurrency(holding.livePrice, holding.quoteCurrency);
+  }
+
+  function displayCurrentValue(holding: HoldingWithQuote): string {
+    if (holding.currentValue === null) return "—";
+
+    if (shouldForceEur(holding)) {
+      return formatCurrency(
+        convertAmount(
+          holding.currentValue,
+          holding.quoteCurrency,
+          "EUR",
+          eurUsdRate,
+        ),
+        "EUR",
+      );
+    }
+
+    return formatCurrency(holding.currentValue, holding.quoteCurrency);
+  }
 
   function openEdit(holding: HoldingWithQuote) {
     setEditing(holding);
@@ -165,7 +235,7 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {holdings.map((holding) => {
+              {sortedHoldings.map((holding) => {
                 const hasQuote = holding.livePrice !== null;
 
                 return (
@@ -193,18 +263,10 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
                       {holding.shares}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(
-                        holding.purchasePrice,
-                        holding.purchaseCurrency,
-                      )}
+                      {displayPurchasePrice(holding)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {hasQuote
-                        ? formatCurrency(
-                            holding.livePrice!,
-                            holding.quoteCurrency,
-                          )
-                        : "—"}
+                      {displayLivePrice(holding)}
                     </TableCell>
                     <TableCell
                       className={cn(
@@ -221,12 +283,7 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">
-                      {holding.currentValue !== null
-                        ? formatCurrency(
-                            holding.currentValue,
-                            holding.quoteCurrency,
-                          )
-                        : "—"}
+                      {displayCurrentValue(holding)}
                     </TableCell>
                     <TableCell className="text-right">
                       {holding.portfolioWeight !== null
