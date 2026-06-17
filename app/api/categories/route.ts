@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   const unique = [...new Set(symbols)].slice(0, 50);
 
   try {
-    const entries = await Promise.all(
+    const results = await Promise.allSettled(
       unique.map(async (symbol) => {
         const financials = await fetchFinancials(symbol);
         return [
@@ -39,6 +39,20 @@ export async function GET(request: Request) {
         ] as const;
       }),
     );
+
+    const entries = results.map((result, idx) => {
+      const symbol = unique[idx]!;
+      if (result.status === "fulfilled") return result.value;
+
+      return [
+        symbol,
+        {
+          sector: null,
+          industry: null,
+          companyName: null,
+        } satisfies CategoryMetadata,
+      ] as const;
+    });
 
     return NextResponse.json(Object.fromEntries(entries));
   } catch (error) {

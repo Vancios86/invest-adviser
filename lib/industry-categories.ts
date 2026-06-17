@@ -48,12 +48,33 @@ export function categorizeHolding(params: {
   const sector = `${params.sector ?? ""}`.toLowerCase();
   const industry = `${params.industry ?? ""}`.toLowerCase();
   const symbol = params.symbol.toUpperCase();
+  const symbolText = symbol.toLowerCase();
 
   if (symbol === "CASH" || symbol === "EUR" || symbol === "USD") return "Cash";
 
+  // Some ETC/UCITS tickers do not expose meaningful sector/industry via Yahoo.
+  // Keep a small override set for known precious-metals products.
+  if (symbol === "8PSB") return "Metals";
+
+  const metalKeywords = [
+    "gold",
+    "silver",
+    "platinum",
+    "palladium",
+    "precious",
+    "bullion",
+    "metals",
+    "mining",
+    "miners",
+  ];
+
   // Quick wins for non-equities
   if (params.assetType === "commodity" || params.assetType === "etc") {
-    if (includesAny(name + " " + industry, ["gold", "silver", "platinum", "metals"])) {
+    if (includesAny(sector, ["basic materials"])) {
+      return "Metals";
+    }
+
+    if (includesAny(`${name} ${industry} ${sector} ${symbolText}`, metalKeywords)) {
       return "Metals";
     }
     return "Other";
@@ -67,7 +88,8 @@ export function categorizeHolding(params: {
   // Metals/mining
   if (
     includesAny(sector, ["basic materials"]) ||
-    includesAny(industry, ["gold", "silver", "metals", "mining"])
+    includesAny(industry, metalKeywords) ||
+    includesAny(name, metalKeywords)
   ) {
     return "Metals";
   }
