@@ -31,8 +31,20 @@ import {
   formatCurrency,
   formatPercent,
 } from "@/lib/portfolio";
-import type { HoldingWithQuote } from "@/lib/types";
+import type { AssetType, HoldingWithQuote, PortfolioCurrency } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const CURRENCY_OPTIONS: { value: PortfolioCurrency; label: string }[] = [
+  { value: "USD", label: "USD ($)" },
+  { value: "EUR", label: "EUR (€)" },
+];
+
+const ASSET_TYPE_LABELS: Record<AssetType, string> = {
+  stock: "Stock",
+  commodity: "Commodity",
+  etc: "ETC",
+  etf: "ETF",
+};
 
 type HoldingsTableProps = {
   holdings: HoldingWithQuote[];
@@ -43,6 +55,9 @@ type HoldingsTableProps = {
 export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableProps) {
   const [editing, setEditing] = useState<HoldingWithQuote | null>(null);
   const [symbol, setSymbol] = useState("");
+  const [assetType, setAssetType] = useState<AssetType>("stock");
+  const [purchaseCurrency, setPurchaseCurrency] =
+    useState<PortfolioCurrency>("USD");
   const [shares, setShares] = useState("");
   const [purchasePrice, setPurchasePrice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
@@ -51,6 +66,8 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
   function openEdit(holding: HoldingWithQuote) {
     setEditing(holding);
     setSymbol(holding.symbol);
+    setAssetType((holding.assetType as AssetType) ?? "stock");
+    setPurchaseCurrency(holding.purchaseCurrency ?? "USD");
     setShares(String(holding.shares));
     setPurchasePrice(String(holding.purchasePrice));
   }
@@ -58,6 +75,8 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
   function closeEdit() {
     setEditing(null);
     setSymbol("");
+    setAssetType("stock");
+    setPurchaseCurrency("USD");
     setShares("");
     setPurchasePrice("");
   }
@@ -72,6 +91,8 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symbol,
+          assetType,
+          purchaseCurrency,
           shares: Number(shares),
           purchasePrice: Number(purchasePrice),
         }),
@@ -136,6 +157,7 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
                 <TableHead className="text-right">Shares</TableHead>
                 <TableHead className="text-right">Purchase</TableHead>
                 <TableHead className="text-right">Live</TableHead>
+                <TableHead className="text-right">24h</TableHead>
                 <TableHead className="text-right">Value</TableHead>
                 <TableHead className="text-right">Weight</TableHead>
                 <TableHead className="text-right">Gain/Loss</TableHead>
@@ -149,27 +171,61 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
                 return (
                   <TableRow key={holding.id}>
                     <TableCell className="font-medium">
-                      <div>{holding.symbol}</div>
+                      <div className="flex items-center gap-2">
+                        <span>{holding.symbol}</span>
+                        <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {ASSET_TYPE_LABELS[(holding.assetType as AssetType) ?? "stock"]}
+                        </span>
+                      </div>
                       {holding.companyName && (
                         <div className="text-xs font-normal text-muted-foreground">
                           {holding.companyName}
                         </div>
                       )}
+                      {holding.quoteSymbol &&
+                        holding.quoteSymbol !== holding.symbol && (
+                          <div className="text-[11px] font-normal text-muted-foreground/80">
+                            Quote: {holding.quoteSymbol}
+                          </div>
+                        )}
                     </TableCell>
                     <TableCell className="text-right">
                       {holding.shares}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(holding.purchasePrice)}
+                      {formatCurrency(
+                        holding.purchasePrice,
+                        holding.purchaseCurrency,
+                      )}
                     </TableCell>
                     <TableCell className="text-right">
                       {hasQuote
-                        ? formatCurrency(holding.livePrice!)
+                        ? formatCurrency(
+                            holding.livePrice!,
+                            holding.quoteCurrency,
+                          )
+                        : "—"}
+                    </TableCell>
+                    <TableCell
+                      className={cn(
+                        "text-right font-medium",
+                        !hasQuote && "text-muted-foreground",
+                        holding.dayChangePct !== null &&
+                          (holding.dayChangePct >= 0
+                            ? "text-green-500"
+                            : "text-red-500"),
+                      )}
+                    >
+                      {holding.dayChangePct !== null
+                        ? formatPercent(holding.dayChangePct)
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">
                       {holding.currentValue !== null
-                        ? formatCurrency(holding.currentValue)
+                        ? formatCurrency(
+                            holding.currentValue,
+                            holding.quoteCurrency,
+                          )
                         : "—"}
                     </TableCell>
                     <TableCell className="text-right">
@@ -237,12 +293,44 @@ export function HoldingsTable({ holdings, onChanged, onAnalyze }: HoldingsTableP
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-2">
+              <Label htmlFor="edit-assetType">Type</Label>
+              <select
+                id="edit-assetType"
+                value={assetType}
+                onChange={(e) => setAssetType(e.target.value as AssetType)}
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {Object.entries(ASSET_TYPE_LABELS).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="edit-symbol">Symbol</Label>
               <Input
                 id="edit-symbol"
                 value={symbol}
                 onChange={(e) => setSymbol(e.target.value.toUpperCase())}
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-purchaseCurrency">Currency</Label>
+              <select
+                id="edit-purchaseCurrency"
+                value={purchaseCurrency}
+                onChange={(e) =>
+                  setPurchaseCurrency(e.target.value as PortfolioCurrency)
+                }
+                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                {CURRENCY_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-shares">Shares</Label>

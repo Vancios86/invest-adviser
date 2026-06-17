@@ -1,12 +1,14 @@
-import YahooFinance from "yahoo-finance2";
+import { yahooFinance } from "@/lib/yahoo";
 import { ANALYSIS_CACHE_TTL_MS, getCached, setCached } from "@/lib/cache";
 import type { IndicatorSnapshot } from "@/lib/types";
 
-const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
-
 type OhlcRow = {
   date: Date;
+  open: number;
+  high: number;
+  low: number;
   close: number;
+  volume: number;
 };
 
 function computeSma(values: number[], period: number): number | null {
@@ -32,6 +34,83 @@ function computeRsi(closes: number[], period = 14): number | null {
   if (avgLoss === 0) return 100;
   const rs = avgGain / avgLoss;
   return 100 - 100 / (1 + rs);
+}
+
+function computeBuyVolumePct(rows: OhlcRow[], period = 20): number | null {
+  if (rows.length < period + 1) return null;
+
+  const window = rows.slice(-(period + 1));
+  let buyVolume = 0;
+  let sellVolume = 0;
+
+  for (let i = 1; i < window.length; i += 1) {
+    const prev = window[i - 1];
+    const current = window[i];
+    if (current.close > prev.close) buyVolume += current.volume;
+    else if (current.close < prev.close) sellVolume += current.volume;
+    else {
+      buyVolume += current.volume / 2;
+      sellVolume += current.volume / 2;
+    }
+  }
+
+  const total = buyVolume + sellVolume;
+  if (total <= 0) return null;
+  return (buyVolume / total) * 100;
+}
+
+function computeCmf(rows: OhlcRow[], period = 20): number | null {
+  if (rows.length < period) return null;
+
+  const window = rows.slice(-period);
+  let moneyFlowVolume = 0;
+  let totalVolume = 0;
+
+  for (const row of window) {
+    const range = row.high - row.low;
+    const multiplier =
+      range === 0 ? 0 : (row.close - row.low - (row.high - row.close)) / range;
+    moneyFlowVolume += multiplier * row.volume;
+    totalVolume += row.volume;
+  }
+
+  if (totalVolume <= 0) return null;
+  return moneyFlowVolume / totalVolume;
+}
+
+function computeRelativeVolume(rows: OhlcRow[], period = 20): number | null {
+  if (rows.length < period + 1) return null;
+
+  const latest = rows.at(-1);
+  if (!latest || latest.volume <= 0) return null;
+
+  const avgVolume = computeSma(
+    rows.slice(-(period + 1), -1).map((row) => row.volume),
+    period,
+  );
+  if (avgVolume === null || avgVolume <= 0) return null;
+  return latest.volume / avgVolume;
+}
+
+function volumeSignalFromMetrics(
+  buyVolumePct20: number | null,
+  cmf20: number | null,
+): IndicatorSnapshot["volumeSignal"] {
+  let score = 0;
+
+  if (buyVolumePct20 !== null) {
+    if (buyVolumePct20 >= 58) score += 1;
+    else if (buyVolumePct20 <= 42) score -= 1;
+  }
+
+  if (cmf20 !== null) {
+    if (cmf20 >= 0.08) score += 1;
+    else if (cmf20 <= -0.08) score -= 1;
+  }
+
+  if (score >= 1) return "buying";
+  if (score <= -1) return "selling";
+  return "neutral";
 }
 
 function trendFromPrice(
@@ -66,8 +145,17 @@ export async function fetchIndicators(
   const history = (chart.quotes ?? []).filter(
     (row): row is OhlcRow =>
       row.date instanceof Date &&
+      typeof row.open === "number" &&
+      typeof row.high === "number" &&
+      typeof row.low === "number" &&
       typeof row.close === "number" &&
-      Number.isFinite(row.close),
+      typeof row.volume === "number" &&
+      Number.isFinite(row.open) &&
+      Number.isFinite(row.high) &&
+      Number.isFinite(row.low) &&
+      Number.isFinite(row.close) &&
+      Number.isFinite(row.volume) &&
+      row.volume >= 0,
   );
 
   const sorted = [...history].sort(
@@ -79,6 +167,9 @@ export async function fetchIndicators(
   const sma50 = computeSma(closes, 50);
   const sma200 = computeSma(closes, 200);
   const rsi14 = computeRsi(closes, 14);
+  const buyVolumePct20 = computeBuyVolumePct(sorted, 20);
+  const cmf20 = computeCmf(sorted, 20);
+  const relativeVolume = computeRelativeVolume(sorted, 20);
 
   const change30d =
     closes.length >= 22 && currentPrice !== null
@@ -94,6 +185,10 @@ export async function fetchIndicators(
     sma200,
     rsi14,
     change30d,
+    buyVolumePct20,
+    cmf20,
+    relativeVolume,
+    volumeSignal: volumeSignalFromMetrics(buyVolumePct20, cmf20),
     trend:
       currentPrice !== null
         ? trendFromPrice(currentPrice, sma20, sma50)

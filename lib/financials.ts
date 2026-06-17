@@ -1,8 +1,6 @@
-import YahooFinance from "yahoo-finance2";
+import { yahooFinance } from "@/lib/yahoo";
 import { ANALYSIS_CACHE_TTL_MS, getCached, setCached } from "@/lib/cache";
 import type { FinancialsSnapshot } from "@/lib/types";
-
-const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;

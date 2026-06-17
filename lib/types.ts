@@ -1,5 +1,9 @@
 import type { Holding } from "@/lib/generated/prisma/client";
 
+export type AssetType = "stock" | "commodity" | "etc" | "etf";
+
+export type PortfolioCurrency = "USD" | "EUR";
+
 export type Quote = {
   price: number;
   currency: string;
@@ -16,10 +20,13 @@ export type QuotesMap = Record<string, Quote>;
 export type HoldingWithQuote = Holding & {
   livePrice: number | null;
   companyName: string | null;
+  purchaseCurrency: PortfolioCurrency;
+  quoteCurrency: PortfolioCurrency;
   currentValue: number | null;
   costBasis: number;
   gainLossPct: number | null;
   gainLossAbs: number | null;
+  dayChangePct: number | null;
   portfolioWeight: number | null;
   isPositive: boolean | null;
 };
@@ -27,6 +34,8 @@ export type HoldingWithQuote = Holding & {
 export type AggregatedBubble = {
   symbol: string;
   companyName: string | null;
+  purchaseCurrency: PortfolioCurrency;
+  quoteCurrency: PortfolioCurrency;
   shares: number;
   avgPurchasePrice: number;
   livePrice: number | null;
@@ -43,6 +52,9 @@ export type PortfolioSummary = {
   totalCostBasis: number;
   totalGainLossAbs: number;
   totalGainLossPct: number;
+  currency: PortfolioCurrency;
+  hasMixedCurrencies: boolean;
+  eurUsdRate: number | null;
 };
 
 export type FinancialsSnapshot = {
@@ -84,6 +96,10 @@ export type IndicatorSnapshot = {
   sma200: number | null;
   rsi14: number | null;
   change30d: number | null;
+  buyVolumePct20: number | null;
+  cmf20: number | null;
+  relativeVolume: number | null;
+  volumeSignal: "buying" | "selling" | "neutral";
   trend: "bullish" | "bearish" | "neutral";
   fetchedAt: string;
 };
@@ -138,6 +154,8 @@ export type AgentOutput = {
 export type PositionContext = {
   shares: number;
   purchasePrice: number;
+  purchaseCurrency: PortfolioCurrency;
+  quoteCurrency: PortfolioCurrency;
   livePrice: number | null;
   gainLossPct: number | null;
   portfolioWeight: number | null;

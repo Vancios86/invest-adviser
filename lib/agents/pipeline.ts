@@ -166,12 +166,42 @@ function runTechnicalAnalyst(context: AnalysisContext): AgentOutput {
   ) {
     keyPoints.push("Trading above 200-day moving average");
     score += 0.25;
-  } else if (
+  } else   if (
     indicators.currentPrice !== null &&
     indicators.sma200 !== null
   ) {
     concerns.push("Trading below 200-day moving average");
     score -= 0.25;
+  }
+
+  if (indicators.buyVolumePct20 !== null) {
+    if (indicators.buyVolumePct20 >= 58) {
+      score += 0.5;
+      keyPoints.push(
+        `Buying volume dominant (${indicators.buyVolumePct20.toFixed(0)}% of 20-day volume on up days)`,
+      );
+    } else if (indicators.buyVolumePct20 <= 42) {
+      score -= 0.5;
+      concerns.push(
+        `Selling volume dominant (${(100 - indicators.buyVolumePct20).toFixed(0)}% of 20-day volume on down days)`,
+      );
+    }
+  }
+
+  if (indicators.cmf20 !== null) {
+    if (indicators.cmf20 >= 0.08) {
+      score += 0.25;
+      keyPoints.push(`Chaikin Money Flow positive (${indicators.cmf20.toFixed(2)})`);
+    } else if (indicators.cmf20 <= -0.08) {
+      score -= 0.25;
+      concerns.push(`Chaikin Money Flow negative (${indicators.cmf20.toFixed(2)})`);
+    }
+  }
+
+  if (indicators.relativeVolume !== null && indicators.relativeVolume >= 1.5) {
+    keyPoints.push(
+      `Volume ${indicators.relativeVolume.toFixed(1)}x above the 20-day average`,
+    );
   }
 
   const signal =

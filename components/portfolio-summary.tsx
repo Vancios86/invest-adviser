@@ -29,10 +29,13 @@ export function PortfolioSummary({
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-semibold">
-            {formatCurrency(summary.totalValue)}
+            {formatCurrency(summary.totalValue, summary.currency)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
             {quotedCount} of {holdingsCount} holdings priced
+            {summary.hasMixedCurrencies && summary.eurUsdRate
+              ? ` · USD holdings converted at €1 = $${summary.eurUsdRate.toFixed(4)}`
+              : ""}
           </p>
         </CardContent>
       </Card>
@@ -45,7 +48,7 @@ export function PortfolioSummary({
         </CardHeader>
         <CardContent>
           <p className="text-2xl font-semibold">
-            {formatCurrency(summary.totalCostBasis)}
+            {formatCurrency(summary.totalCostBasis, summary.currency)}
           </p>
         </CardContent>
       </Card>
@@ -63,7 +66,7 @@ export function PortfolioSummary({
               isPositive ? "text-green-500" : "text-red-500",
             )}
           >
-            {formatCurrency(summary.totalGainLossAbs)}
+            {formatCurrency(summary.totalGainLossAbs, summary.currency)}
           </p>
         </CardContent>
       </Card>

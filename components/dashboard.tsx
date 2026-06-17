@@ -22,6 +22,7 @@ const QUOTE_REFRESH_MS = 5 * 60 * 1000;
 export function Dashboard() {
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [quotes, setQuotes] = useState<QuotesMap>({});
+  const [eurUsdRate, setEurUsdRate] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,6 +41,7 @@ export function Dashboard() {
   const loadQuotes = useCallback(async (symbols: string[]) => {
     if (symbols.length === 0) {
       setQuotes({});
+      setEurUsdRate(null);
       return;
     }
 
@@ -59,6 +61,12 @@ export function Dashboard() {
 
     const data = (await response.json()) as QuotesMap;
     setQuotes(data);
+
+    const fxResponse = await fetch("/api/fx");
+    if (fxResponse.ok) {
+      const fx = (await fxResponse.json()) as { eurUsd: number | null };
+      setEurUsdRate(fx.eurUsd);
+    }
   }, []);
 
   const loadHoldings = useCallback(async () => {
@@ -69,7 +77,7 @@ export function Dashboard() {
 
     const data = (await response.json()) as Holding[];
     setHoldings(data);
-    await loadQuotes(data.map((h) => h.symbol));
+    await loadQuotes(data.map((h) => h.quoteSymbol ?? h.symbol));
   }, [loadQuotes]);
 
   const refresh = useCallback(
@@ -124,18 +132,18 @@ export function Dashboard() {
   }, [refresh]);
 
   const enrichedHoldings = useMemo(
-    () => enrichHoldings(holdings, quotes),
-    [holdings, quotes],
+    () => enrichHoldings(holdings, quotes, eurUsdRate),
+    [holdings, quotes, eurUsdRate],
   );
 
   const bubbles = useMemo(
-    () => aggregateBySymbol(enrichedHoldings),
-    [enrichedHoldings],
+    () => aggregateBySymbol(enrichedHoldings, eurUsdRate),
+    [enrichedHoldings, eurUsdRate],
   );
 
   const summary = useMemo(
-    () => computePortfolioSummary(enrichedHoldings),
-    [enrichedHoldings],
+    () => computePortfolioSummary(enrichedHoldings, eurUsdRate),
+    [enrichedHoldings, eurUsdRate],
   );
 
   const quotedCount = enrichedHoldings.filter(

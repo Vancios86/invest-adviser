@@ -1,38 +1,110 @@
+import { convertAmount, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
+import { getQuoteSymbol } from "@/lib/holding-utils";
 import type {
   AggregatedBubble,
   HoldingWithQuote,
+  PortfolioCurrency,
   PortfolioSummary,
+  PositionContext,
   QuotesMap,
 } from "@/lib/types";
 import type { Holding } from "@/lib/generated/prisma/client";
+
+function normalizeCurrency(value: string | null | undefined): PortfolioCurrency {
+  return value === "EUR" ? "EUR" : "USD";
+}
+
+function purchaseInQuoteCurrency(
+  purchasePrice: number,
+  purchaseCurrency: PortfolioCurrency,
+  quoteCurrency: PortfolioCurrency,
+  eurUsdRate: number | null,
+): number {
+  return convertAmount(
+    purchasePrice,
+    purchaseCurrency,
+    quoteCurrency,
+    eurUsdRate,
+  );
+}
+
+function dayChangeFromQuote(
+  quote: QuotesMap[string] | undefined,
+  livePrice: number | null,
+): number | null {
+  if (quote?.changePercent != null && Number.isFinite(quote.changePercent)) {
+    return quote.changePercent;
+  }
+
+  if (
+    livePrice !== null &&
+    quote?.previousClose != null &&
+    quote.previousClose > 0
+  ) {
+    return ((livePrice - quote.previousClose) / quote.previousClose) * 100;
+  }
+
+  return null;
+}
 
 export function computeHoldingMetrics(
   holding: Holding,
   quotes: QuotesMap,
   totalPortfolioValue: number | null,
+  eurUsdRate: number | null,
 ): HoldingWithQuote {
-  const quote = quotes[holding.symbol.toUpperCase()];
+  const quote = quotes[getQuoteSymbol(holding)];
   const livePrice = quote?.price ?? null;
+  const purchaseCurrency = normalizeCurrency(holding.purchaseCurrency);
+  const quoteCurrency = normalizeCurrency(quote?.currency);
   const costBasis = holding.shares * holding.purchasePrice;
   const currentValue = livePrice !== null ? holding.shares * livePrice : null;
-  const gainLossPct =
+
+  const comparablePurchasePrice =
     livePrice !== null
-      ? ((livePrice - holding.purchasePrice) / holding.purchasePrice) * 100
+      ? purchaseInQuoteCurrency(
+          holding.purchasePrice,
+          purchaseCurrency,
+          quoteCurrency,
+          eurUsdRate,
+        )
       : null;
-  const gainLossAbs = currentValue !== null ? currentValue - costBasis : null;
+
+  const gainLossPct =
+    livePrice !== null && comparablePurchasePrice !== null
+      ? ((livePrice - comparablePurchasePrice) / comparablePurchasePrice) * 100
+      : null;
+  const gainLossAbs =
+    livePrice !== null && comparablePurchasePrice !== null
+      ? holding.shares * (livePrice - comparablePurchasePrice)
+      : null;
+
+  const valueForWeight =
+    currentValue !== null
+      ? convertAmount(
+          currentValue,
+          quoteCurrency,
+          PORTFOLIO_BASE_CURRENCY,
+          eurUsdRate,
+        )
+      : null;
+
   const portfolioWeight =
-    currentValue !== null && totalPortfolioValue && totalPortfolioValue > 0
-      ? (currentValue / totalPortfolioValue) * 100
+    valueForWeight !== null && totalPortfolioValue && totalPortfolioValue > 0
+      ? (valueForWeight / totalPortfolioValue) * 100
       : null;
 
   return {
     ...holding,
+    purchaseCurrency,
+    quoteCurrency,
     livePrice,
     companyName: quote?.companyName ?? null,
     currentValue,
     costBasis,
     gainLossPct,
     gainLossAbs,
+    dayChangePct: dayChangeFromQuote(quote, livePrice),
     portfolioWeight,
     isPositive: gainLossPct !== null ? gainLossPct >= 0 : null,
   };
@@ -41,28 +113,112 @@ export function computeHoldingMetrics(
 export function computeTotalPortfolioValue(
   holdings: Holding[],
   quotes: QuotesMap,
+  eurUsdRate: number | null,
 ): number {
   return holdings.reduce((total, holding) => {
-    const quote = quotes[holding.symbol.toUpperCase()];
+    const quote = quotes[getQuoteSymbol(holding)];
     if (!quote) return total;
-    return total + holding.shares * quote.price;
+    const quoteCurrency = normalizeCurrency(quote.currency);
+    const value = holding.shares * quote.price;
+    return (
+      total +
+      convertAmount(value, quoteCurrency, PORTFOLIO_BASE_CURRENCY, eurUsdRate)
+    );
   }, 0);
 }
 
 export function enrichHoldings(
   holdings: Holding[],
   quotes: QuotesMap,
+  eurUsdRate: number | null,
 ): HoldingWithQuote[] {
-  const totalValue = computeTotalPortfolioValue(holdings, quotes);
+  const totalValue = computeTotalPortfolioValue(holdings, quotes, eurUsdRate);
   const totalForWeight = totalValue > 0 ? totalValue : null;
 
   return holdings.map((holding) =>
-    computeHoldingMetrics(holding, quotes, totalForWeight),
+    computeHoldingMetrics(holding, quotes, totalForWeight, eurUsdRate),
   );
+}
+
+function sumCostBasisInCurrency(
+  holdings: HoldingWithQuote[],
+  targetCurrency: PortfolioCurrency,
+  eurUsdRate: number | null,
+): number {
+  return holdings.reduce(
+    (sum, holding) =>
+      sum +
+      convertAmount(
+        holding.costBasis,
+        holding.purchaseCurrency,
+        targetCurrency,
+        eurUsdRate,
+      ),
+    0,
+  );
+}
+
+function sumCurrentValueInCurrency(
+  holdings: HoldingWithQuote[],
+  targetCurrency: PortfolioCurrency,
+  eurUsdRate: number | null,
+): number {
+  return holdings.reduce((sum, holding) => {
+    if (holding.currentValue === null) return sum;
+    return (
+      sum +
+      convertAmount(
+        holding.currentValue,
+        holding.quoteCurrency,
+        targetCurrency,
+        eurUsdRate,
+      )
+    );
+  }, 0);
+}
+
+export function aggregatePositionFromHoldings(
+  holdings: HoldingWithQuote[],
+  portfolioSummaryTotalValue: number,
+  eurUsdRate: number | null,
+): PositionContext | null {
+  if (holdings.length === 0) return null;
+
+  const quoteCurrency = holdings[0]!.quoteCurrency;
+  const totalShares = holdings.reduce((sum, holding) => sum + holding.shares, 0);
+  const totalCostInQuote = sumCostBasisInCurrency(
+    holdings,
+    quoteCurrency,
+    eurUsdRate,
+  );
+  const avgPurchasePrice = totalCostInQuote / totalShares;
+  const livePrice = holdings[0]?.livePrice ?? null;
+  const currentValueInBase = sumCurrentValueInCurrency(
+    holdings,
+    PORTFOLIO_BASE_CURRENCY,
+    eurUsdRate,
+  );
+
+  return {
+    shares: totalShares,
+    purchasePrice: avgPurchasePrice,
+    purchaseCurrency: quoteCurrency,
+    quoteCurrency,
+    livePrice,
+    gainLossPct:
+      livePrice !== null
+        ? ((livePrice - avgPurchasePrice) / avgPurchasePrice) * 100
+        : null,
+    portfolioWeight:
+      portfolioSummaryTotalValue > 0
+        ? (currentValueInBase / portfolioSummaryTotalValue) * 100
+        : null,
+  };
 }
 
 export function aggregateBySymbol(
   holdings: HoldingWithQuote[],
+  eurUsdRate: number | null,
 ): AggregatedBubble[] {
   const grouped = new Map<string, AggregatedBubble>();
 
@@ -71,14 +227,24 @@ export function aggregateBySymbol(
     const existing = grouped.get(symbol);
 
     if (!existing) {
+      const quoteCurrency = holding.quoteCurrency;
+      const costInQuote = convertAmount(
+        holding.costBasis,
+        holding.purchaseCurrency,
+        quoteCurrency,
+        eurUsdRate,
+      );
+
       grouped.set(symbol, {
         symbol,
         companyName: holding.companyName,
+        purchaseCurrency: holding.purchaseCurrency,
+        quoteCurrency,
         shares: holding.shares,
-        avgPurchasePrice: holding.purchasePrice,
+        avgPurchasePrice: costInQuote / holding.shares,
         livePrice: holding.livePrice,
         currentValue: holding.currentValue,
-        costBasis: holding.costBasis,
+        costBasis: costInQuote,
         gainLossPct: holding.gainLossPct,
         gainLossAbs: holding.gainLossAbs,
         portfolioWeight: holding.portfolioWeight,
@@ -87,13 +253,35 @@ export function aggregateBySymbol(
       continue;
     }
 
+    const quoteCurrency = existing.quoteCurrency;
     const totalShares = existing.shares + holding.shares;
-    const totalCostBasis = existing.costBasis + holding.costBasis;
-    const avgPurchasePrice = totalCostBasis / totalShares;
+    const holdingCostInQuote = convertAmount(
+      holding.costBasis,
+      holding.purchaseCurrency,
+      quoteCurrency,
+      eurUsdRate,
+    );
+    const totalCostInQuote = existing.costBasis + holdingCostInQuote;
+    const avgPurchasePrice = totalCostInQuote / totalShares;
     const currentValue =
-      existing.currentValue !== null && holding.currentValue !== null
-        ? existing.currentValue + holding.currentValue
-        : existing.currentValue ?? holding.currentValue;
+      existing.currentValue !== null || holding.currentValue !== null
+        ? (existing.currentValue !== null
+            ? convertAmount(
+                existing.currentValue,
+                existing.quoteCurrency,
+                quoteCurrency,
+                eurUsdRate,
+              )
+            : 0) +
+          (holding.currentValue !== null
+            ? convertAmount(
+                holding.currentValue,
+                holding.quoteCurrency,
+                quoteCurrency,
+                eurUsdRate,
+              )
+            : 0)
+        : null;
 
     const livePrice = holding.livePrice ?? existing.livePrice;
     const gainLossPct =
@@ -101,16 +289,18 @@ export function aggregateBySymbol(
         ? ((livePrice - avgPurchasePrice) / avgPurchasePrice) * 100
         : null;
     const gainLossAbs =
-      currentValue !== null ? currentValue - totalCostBasis : null;
+      currentValue !== null ? currentValue - totalCostInQuote : null;
 
     grouped.set(symbol, {
       symbol,
-      companyName: holding.companyName ?? existing.companyName,
+      companyName: existing.companyName ?? holding.companyName,
+      purchaseCurrency: existing.purchaseCurrency,
+      quoteCurrency: existing.quoteCurrency,
       shares: totalShares,
       avgPurchasePrice,
       livePrice,
       currentValue,
-      costBasis: totalCostBasis,
+      costBasis: totalCostInQuote,
       gainLossPct,
       gainLossAbs,
       portfolioWeight: null,
@@ -119,16 +309,32 @@ export function aggregateBySymbol(
   }
 
   const bubbles = Array.from(grouped.values());
-  const totalValue = bubbles.reduce(
-    (sum, b) => sum + (b.currentValue ?? 0),
+  const totalValueInBase = bubbles.reduce(
+    (sum, bubble) =>
+      sum +
+      (bubble.currentValue !== null
+        ? convertAmount(
+            bubble.currentValue,
+            bubble.quoteCurrency,
+            PORTFOLIO_BASE_CURRENCY,
+            eurUsdRate,
+          )
+        : 0),
     0,
   );
 
-  if (totalValue > 0) {
+  if (totalValueInBase > 0) {
     for (const bubble of bubbles) {
       bubble.portfolioWeight =
         bubble.currentValue !== null
-          ? (bubble.currentValue / totalValue) * 100
+          ? (convertAmount(
+              bubble.currentValue,
+              bubble.quoteCurrency,
+              PORTFOLIO_BASE_CURRENCY,
+              eurUsdRate,
+            ) /
+              totalValueInBase) *
+            100
           : null;
     }
   }
@@ -136,14 +342,46 @@ export function aggregateBySymbol(
   return bubbles;
 }
 
+function resolveSummaryCurrency(): PortfolioCurrency {
+  return PORTFOLIO_BASE_CURRENCY;
+}
+
 export function computePortfolioSummary(
   holdings: HoldingWithQuote[],
+  eurUsdRate: number | null,
 ): PortfolioSummary {
-  const totalValue = holdings.reduce(
-    (sum, h) => sum + (h.currentValue ?? 0),
-    0,
+  const currency = resolveSummaryCurrency();
+  const hasUsdHoldings = holdings.some(
+    (holding) =>
+      holding.purchaseCurrency === "USD" || holding.quoteCurrency === "USD",
   );
-  const totalCostBasis = holdings.reduce((sum, h) => sum + h.costBasis, 0);
+  const hasMixedCurrencies = hasUsdHoldings;
+
+  const totalValue = holdings.reduce((sum, holding) => {
+    if (holding.currentValue === null) return sum;
+    return (
+      sum +
+      convertAmount(
+        holding.currentValue,
+        holding.quoteCurrency,
+        currency,
+        eurUsdRate,
+      )
+    );
+  }, 0);
+
+  const totalCostBasis = holdings.reduce((sum, holding) => {
+    return (
+      sum +
+      convertAmount(
+        holding.costBasis,
+        holding.purchaseCurrency,
+        currency,
+        eurUsdRate,
+      )
+    );
+  }, 0);
+
   const totalGainLossAbs = totalValue - totalCostBasis;
   const totalGainLossPct =
     totalCostBasis > 0 ? (totalGainLossAbs / totalCostBasis) * 100 : 0;
@@ -153,11 +391,18 @@ export function computePortfolioSummary(
     totalCostBasis,
     totalGainLossAbs,
     totalGainLossPct,
+    currency,
+    hasMixedCurrencies,
+    eurUsdRate,
   };
 }
 
-export function formatCurrency(value: number, currency = "USD"): string {
-  return new Intl.NumberFormat("en-US", {
+export function formatCurrency(
+  value: number,
+  currency: PortfolioCurrency = "USD",
+): string {
+  const locale = currency === "EUR" ? "de-DE" : "en-US";
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
     minimumFractionDigits: 2,

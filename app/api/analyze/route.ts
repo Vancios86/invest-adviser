@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { runAnalysisPipeline } from "@/lib/agents/pipeline";
+import { fetchEurUsdRate } from "@/lib/currency";
 import { fetchStockData } from "@/lib/analysis-data";
 import { db } from "@/lib/db";
 import {
+  aggregatePositionFromHoldings,
   computePortfolioSummary,
   enrichHoldings,
 } from "@/lib/portfolio";
 import { fetchQuotes } from "@/lib/quotes";
+import { getQuoteSymbol } from "@/lib/holding-utils";
+import { isValidSymbolFormat } from "@/lib/symbols";
 import type { PositionContext } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -17,18 +21,33 @@ export async function POST(request: Request) {
       .toUpperCase();
     const holdingId = body.holdingId ? String(body.holdingId) : undefined;
 
-    if (!symbol || !/^[A-Z0-9.\-^]{1,10}$/.test(symbol)) {
+    if (!symbol || !isValidSymbolFormat(symbol)) {
       return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
     }
 
-    const [data, holdings, quotes] = await Promise.all([
-      fetchStockData(symbol),
-      db.holding.findMany(),
-      fetchQuotes([symbol]),
+    const holdingRecord = holdingId
+      ? await db.holding.findUnique({ where: { id: holdingId } })
+      : null;
+    const quoteSymbol = holdingRecord
+      ? getQuoteSymbol(holdingRecord)
+      : symbol;
+
+    const holdings = await db.holding.findMany();
+    const quoteSymbols = [
+      ...new Set([
+        ...holdings.map((holding) => getQuoteSymbol(holding)),
+        quoteSymbol,
+      ]),
+    ];
+
+    const [data, quotes, eurUsdRate] = await Promise.all([
+      fetchStockData(quoteSymbol),
+      fetchQuotes(quoteSymbols),
+      fetchEurUsdRate(),
     ]);
 
-    const enriched = enrichHoldings(holdings, quotes);
-    const portfolioSummary = computePortfolioSummary(enriched);
+    const enriched = enrichHoldings(holdings, quotes, eurUsdRate);
+    const portfolioSummary = computePortfolioSummary(enriched, eurUsdRate);
 
     let position: PositionContext | undefined;
     if (holdingId) {
@@ -37,6 +56,8 @@ export async function POST(request: Request) {
         position = {
           shares: holding.shares,
           purchasePrice: holding.purchasePrice,
+          purchaseCurrency: holding.purchaseCurrency,
+          quoteCurrency: holding.quoteCurrency,
           livePrice: holding.livePrice,
           gainLossPct: holding.gainLossPct,
           portfolioWeight: holding.portfolioWeight,
@@ -45,27 +66,12 @@ export async function POST(request: Request) {
     } else {
       const aggregated = enriched.filter((h) => h.symbol === symbol);
       if (aggregated.length > 0) {
-        const totalShares = aggregated.reduce((sum, h) => sum + h.shares, 0);
-        const totalCost = aggregated.reduce((sum, h) => sum + h.costBasis, 0);
-        const avgPrice = totalCost / totalShares;
-        const livePrice = aggregated[0]?.livePrice ?? null;
-        const currentValue = aggregated.reduce(
-          (sum, h) => sum + (h.currentValue ?? 0),
-          0,
-        );
-        position = {
-          shares: totalShares,
-          purchasePrice: avgPrice,
-          livePrice,
-          gainLossPct:
-            livePrice !== null
-              ? ((livePrice - avgPrice) / avgPrice) * 100
-              : null,
-          portfolioWeight:
-            portfolioSummary.totalValue > 0
-              ? (currentValue / portfolioSummary.totalValue) * 100
-              : null,
-        };
+        position =
+          aggregatePositionFromHoldings(
+            aggregated,
+            portfolioSummary.totalValue,
+            eurUsdRate,
+          ) ?? undefined;
       }
     }
 

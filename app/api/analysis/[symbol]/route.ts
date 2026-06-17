@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchStockData } from "@/lib/analysis-data";
+import { isValidSymbolFormat } from "@/lib/symbols";
 
 type RouteContext = {
   params: Promise<{ symbol: string }>;
@@ -10,7 +11,7 @@ export async function GET(_request: Request, context: RouteContext) {
     const { symbol } = await context.params;
     const normalized = symbol.trim().toUpperCase();
 
-    if (!normalized || !/^[A-Z0-9.\-^]{1,10}$/.test(normalized)) {
+    if (!normalized || !isValidSymbolFormat(normalized)) {
       return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
     }
 

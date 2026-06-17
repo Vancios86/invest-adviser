@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { validateSymbol } from "@/lib/quotes";
+import {
+  defaultPurchaseCurrency,
+  parsePurchaseCurrency,
+} from "@/lib/currency-utils";
+import {
+  isValidSymbolFormat,
+  parseAssetType,
+  resolveQuoteSymbol,
+} from "@/lib/symbols";
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -18,27 +26,45 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const data: {
       symbol?: string;
+      quoteSymbol?: string | null;
+      assetType?: string;
+      purchaseCurrency?: string;
       shares?: number;
       purchasePrice?: number;
       purchaseDate?: Date | null;
     } = {};
 
-    if (body.symbol !== undefined) {
-      const symbol = String(body.symbol).trim().toUpperCase();
-      if (!symbol || !/^[A-Z0-9.\-^]{1,10}$/.test(symbol)) {
+    if (body.symbol !== undefined || body.assetType !== undefined) {
+      const symbol = String(body.symbol ?? existing.symbol)
+        .trim()
+        .toUpperCase();
+      const assetType = parseAssetType(body.assetType ?? existing.assetType);
+
+      if (!symbol || !isValidSymbolFormat(symbol)) {
         return NextResponse.json(
           { error: "Invalid symbol format" },
           { status: 400 },
         );
       }
-      const isValid = await validateSymbol(symbol);
-      if (!isValid) {
+
+      const resolved = await resolveQuoteSymbol(symbol, assetType);
+      if (!resolved) {
         return NextResponse.json(
-          { error: `Could not find a valid quote for symbol "${symbol}"` },
+          {
+            error: `Could not find live market data for "${symbol}". Try the full Yahoo symbol (e.g. 4GLD.DE) or check the asset type.`,
+          },
           { status: 400 },
         );
       }
-      data.symbol = symbol;
+
+      data.symbol = resolved.symbol;
+      data.quoteSymbol =
+        resolved.quoteSymbol !== resolved.symbol ? resolved.quoteSymbol : null;
+      data.assetType = resolved.assetType;
+    }
+
+    if (body.purchaseCurrency !== undefined) {
+      data.purchaseCurrency = parsePurchaseCurrency(body.purchaseCurrency);
     }
 
     if (body.shares !== undefined) {

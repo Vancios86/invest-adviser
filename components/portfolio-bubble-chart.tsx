@@ -400,18 +400,28 @@ export function PortfolioBubbleChart({
               {tooltip.bubble.shares} shares
             </p>
             <p>
-              Avg cost: {formatCurrency(tooltip.bubble.avgPurchasePrice)}
+              Avg cost:{" "}
+              {formatCurrency(
+                tooltip.bubble.avgPurchasePrice,
+                tooltip.bubble.quoteCurrency,
+              )}
             </p>
             <p>
               Live:{" "}
               {tooltip.bubble.livePrice !== null
-                ? formatCurrency(tooltip.bubble.livePrice)
+                ? formatCurrency(
+                    tooltip.bubble.livePrice,
+                    tooltip.bubble.quoteCurrency,
+                  )
                 : "—"}
             </p>
             <p>
               Value:{" "}
               {tooltip.bubble.currentValue !== null
-                ? formatCurrency(tooltip.bubble.currentValue)
+                ? formatCurrency(
+                    tooltip.bubble.currentValue,
+                    tooltip.bubble.quoteCurrency,
+                  )
                 : "—"}
             </p>
             <p>

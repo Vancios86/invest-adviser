@@ -30,6 +30,7 @@ import type {
   AgentOutput,
   AnalysisReport,
   HoldingWithQuote,
+  IndicatorSnapshot,
   Recommendation,
   StockDataBundle,
 } from "@/lib/types";
@@ -87,6 +88,34 @@ function formatRatio(value: number | null, asPercent = false): string {
   return value.toFixed(2);
 }
 
+function formatVolumePct(value: number | null): string {
+  if (value === null) return "—";
+  return `${value.toFixed(0)}% buy / ${(100 - value).toFixed(0)}% sell`;
+}
+
+function formatRelativeVolume(value: number | null): string {
+  if (value === null) return "—";
+  return `${value.toFixed(2)}x avg`;
+}
+
+const VOLUME_SIGNAL_STYLES: Record<
+  IndicatorSnapshot["volumeSignal"],
+  { label: string; className: string }
+> = {
+  buying: {
+    label: "Buying pressure",
+    className: "text-green-500",
+  },
+  selling: {
+    label: "Selling pressure",
+    className: "text-red-500",
+  },
+  neutral: {
+    label: "Balanced volume",
+    className: "text-muted-foreground",
+  },
+};
+
 export function StockAnalysisPanel({
   open,
   onOpenChange,
@@ -137,6 +166,12 @@ export function StockAnalysisPanel({
   const recStyle = result
     ? RECOMMENDATION_STYLES[result.recommendation]
     : null;
+  const volumeStyle = result
+    ? VOLUME_SIGNAL_STYLES[result.data.indicators.volumeSignal]
+    : null;
+  const buyVolumePct = result?.data.indicators.buyVolumePct20 ?? null;
+  const sellVolumePct =
+    buyVolumePct !== null ? Math.max(0, 100 - buyVolumePct) : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -198,13 +233,19 @@ export function StockAnalysisPanel({
                   <Metric label="Shares" value={String(result.position.shares)} />
                   <Metric
                     label="Avg cost"
-                    value={formatCurrency(result.position.purchasePrice)}
+                    value={formatCurrency(
+                      result.position.purchasePrice,
+                      result.position.purchaseCurrency,
+                    )}
                   />
                   <Metric
                     label="Live"
                     value={
                       result.position.livePrice !== null
-                        ? formatCurrency(result.position.livePrice)
+                        ? formatCurrency(
+                            result.position.livePrice,
+                            result.position.quoteCurrency,
+                          )
                         : "—"
                     }
                   />
@@ -242,6 +283,55 @@ export function StockAnalysisPanel({
                 }
               />
             </div>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Buying / selling volume</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {volumeStyle && (
+                  <p className={cn("text-sm font-medium", volumeStyle.className)}>
+                    {volumeStyle.label}
+                  </p>
+                )}
+
+                {buyVolumePct !== null && sellVolumePct !== null && (
+                  <div className="space-y-2">
+                    <div className="flex h-3 overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="bg-green-500/80 transition-all"
+                        style={{ width: `${buyVolumePct}%` }}
+                      />
+                      <div
+                        className="bg-red-500/80 transition-all"
+                        style={{ width: `${sellVolumePct}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>Buy {buyVolumePct.toFixed(0)}%</span>
+                      <span>Sell {sellVolumePct.toFixed(0)}%</span>
+                    </div>
+                  </div>
+                )}
+
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <Metric
+                    label="Buy/sell split (20d)"
+                    value={formatVolumePct(result.data.indicators.buyVolumePct20)}
+                  />
+                  <Metric
+                    label="CMF (20)"
+                    value={formatRatio(result.data.indicators.cmf20)}
+                  />
+                  <Metric
+                    label="Relative volume"
+                    value={formatRelativeVolume(
+                      result.data.indicators.relativeVolume,
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
             <div>
               <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">

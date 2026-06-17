@@ -1,7 +1,6 @@
-import YahooFinance from "yahoo-finance2";
-import type { Quote, QuotesMap } from "@/lib/types";
-
-const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
+import { yahooFinance } from "@/lib/yahoo";
+import { resolveQuoteSymbol } from "@/lib/symbols";
+import type { AssetType, Quote, QuotesMap } from "@/lib/types";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -244,13 +243,19 @@ export async function fetchQuotes(symbols: string[]): Promise<QuotesMap> {
   return result;
 }
 
-export async function validateSymbol(symbol: string): Promise<boolean> {
-  try {
-    const quotes = await fetchQuotes([symbol]);
-    return Boolean(quotes[symbol.toUpperCase()]);
-  } catch {
-    return false;
-  }
+export async function validateSymbol(
+  symbol: string,
+  assetType: AssetType = "stock",
+): Promise<boolean> {
+  const resolved = await resolveQuoteSymbol(symbol, assetType);
+  return resolved !== null;
+}
+
+export async function resolveSymbolForHolding(
+  symbol: string,
+  assetType: AssetType,
+) {
+  return resolveQuoteSymbol(symbol, assetType);
 }
 
 export type { Quote, QuotesMap };
