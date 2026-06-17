@@ -2,8 +2,20 @@ import { yahooFinance } from "@/lib/yahoo";
 import { ANALYSIS_CACHE_TTL_MS, getCached, setCached } from "@/lib/cache";
 import type { FinancialsSnapshot } from "@/lib/types";
 
+export type CategoryMetadata = {
+  sector: string | null;
+  industry: string | null;
+  companyName: string | null;
+};
+
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function companyNameFromQuote(quote: unknown): string | null {
+  if (!quote || typeof quote !== "object") return null;
+  const record = quote as { shortName?: string; longName?: string };
+  return record.shortName ?? record.longName ?? null;
 }
 
 export async function fetchFinancials(
@@ -69,4 +81,33 @@ export async function fetchFinancials(
 
   setCached(cacheKey, snapshot, ANALYSIS_CACHE_TTL_MS);
   return snapshot;
+}
+
+export async function fetchCategoryMetadata(
+  symbol: string,
+): Promise<CategoryMetadata> {
+  const normalized = symbol.trim().toUpperCase();
+  if (!normalized) {
+    return { sector: null, industry: null, companyName: null };
+  }
+
+  try {
+    const financials = await fetchFinancials(normalized);
+    return {
+      sector: financials.sector,
+      industry: financials.industry,
+      companyName: financials.companyName,
+    };
+  } catch {
+    try {
+      const quote = await yahooFinance.quote(normalized);
+      return {
+        sector: null,
+        industry: null,
+        companyName: companyNameFromQuote(quote),
+      };
+    } catch {
+      return { sector: null, industry: null, companyName: null };
+    }
+  }
 }
