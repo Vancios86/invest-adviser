@@ -4,6 +4,8 @@ import {
   defaultPurchaseCurrency,
   parsePurchaseCurrency,
 } from "@/lib/currency-utils";
+import { fetchEurUsdRate } from "@/lib/currency";
+import { mergePurchaseLots } from "@/lib/holding-utils";
 import {
   isValidSymbolFormat,
   parseAssetType,
@@ -64,6 +66,46 @@ export async function POST(request: Request) {
       );
     }
 
+    const newPurchaseCurrency =
+      purchaseCurrency ??
+      defaultPurchaseCurrency(resolved.assetType, resolved.currency);
+
+    const existing = await db.holding.findFirst({
+      where: { symbol: resolved.symbol },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (existing) {
+      const eurUsdRate = await fetchEurUsdRate();
+      const merged = mergePurchaseLots(
+        {
+          shares: existing.shares,
+          purchasePrice: existing.purchasePrice,
+          purchaseCurrency: parsePurchaseCurrency(existing.purchaseCurrency),
+        },
+        {
+          shares,
+          purchasePrice,
+          purchaseCurrency: newPurchaseCurrency,
+        },
+        eurUsdRate,
+      );
+
+      const holding = await db.holding.update({
+        where: { id: existing.id },
+        data: {
+          quoteSymbol:
+            resolved.quoteSymbol !== resolved.symbol ? resolved.quoteSymbol : null,
+          assetType: resolved.assetType,
+          shares: merged.shares,
+          purchasePrice: merged.purchasePrice,
+          purchaseCurrency: merged.purchaseCurrency,
+        },
+      });
+
+      return NextResponse.json(holding);
+    }
+
     const holding = await db.holding.create({
       data: {
         symbol: resolved.symbol,
@@ -72,9 +114,7 @@ export async function POST(request: Request) {
         assetType: resolved.assetType,
         shares,
         purchasePrice,
-        purchaseCurrency:
-          purchaseCurrency ??
-          defaultPurchaseCurrency(resolved.assetType, resolved.currency),
+        purchaseCurrency: newPurchaseCurrency,
         purchaseDate,
       },
     });

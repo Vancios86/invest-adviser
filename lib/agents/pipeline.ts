@@ -198,7 +198,29 @@ function runTechnicalAnalyst(context: AnalysisContext): AgentOutput {
     }
   }
 
-  if (indicators.relativeVolume !== null && indicators.relativeVolume >= 1.5) {
+  if (indicators.unusualVolume && indicators.relativeVolume !== null) {
+    const volumeMultiple = indicators.relativeVolume.toFixed(1);
+
+    if (indicators.volumeSignal === "buying") {
+      score += 0.5;
+      keyPoints.push(
+        `Unusual volume (${volumeMultiple}x avg) with buying pressure — strong participation`,
+      );
+    } else if (indicators.volumeSignal === "selling") {
+      score -= 0.5;
+      concerns.push(
+        `Unusual volume (${volumeMultiple}x avg) with selling pressure — distribution risk`,
+      );
+    } else {
+      score += 0.25;
+      keyPoints.push(
+        `Unusual volume (${volumeMultiple}x avg) — watch for a catalyst or breakout`,
+      );
+    }
+  } else if (
+    indicators.relativeVolume !== null &&
+    indicators.relativeVolume >= 1.2
+  ) {
     keyPoints.push(
       `Volume ${indicators.relativeVolume.toFixed(1)}x above the 20-day average`,
     );

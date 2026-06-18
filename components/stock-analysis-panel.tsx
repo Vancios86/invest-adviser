@@ -172,6 +172,7 @@ export function StockAnalysisPanel({
   const buyVolumePct = result?.data.indicators.buyVolumePct20 ?? null;
   const sellVolumePct =
     buyVolumePct !== null ? Math.max(0, 100 - buyVolumePct) : null;
+  const unusualVolume = result?.data.indicators.unusualVolume ?? false;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -180,6 +181,15 @@ export function StockAnalysisPanel({
           <DialogTitle className="flex items-center gap-2">
             <Brain className="size-5" />
             {symbol ? `${symbol} Analysis` : "Stock Analysis"}
+            {unusualVolume && (
+              <span
+                className="text-base font-bold leading-none text-red-500"
+                title="Unusual volume detected"
+                aria-label="Unusual volume detected"
+              >
+                !
+              </span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -289,6 +299,16 @@ export function StockAnalysisPanel({
                 <CardTitle className="text-sm">Buying / selling volume</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                {unusualVolume && (
+                  <p className="flex items-center gap-2 text-sm font-medium text-red-500">
+                    <span aria-hidden="true">!</span>
+                    Unusual volume
+                    {result.data.indicators.relativeVolume !== null
+                      ? ` (${result.data.indicators.relativeVolume.toFixed(1)}x 20-day average)`
+                      : ""}
+                  </p>
+                )}
+
                 {volumeStyle && (
                   <p className={cn("text-sm font-medium", volumeStyle.className)}>
                     {volumeStyle.label}

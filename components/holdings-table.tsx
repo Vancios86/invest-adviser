@@ -273,6 +273,23 @@ export function HoldingsTable({
                           aria-hidden="true"
                         />
                         <span>{holding.symbol}</span>
+                        {holding.unusualVolume && (
+                          <span
+                            className="text-sm font-bold leading-none text-red-500"
+                            title={
+                              holding.relativeVolume !== null
+                                ? `Unusual volume: ${holding.relativeVolume.toFixed(1)}x average daily volume`
+                                : "Unusual volume"
+                            }
+                            aria-label={
+                              holding.relativeVolume !== null
+                                ? `Unusual volume: ${holding.relativeVolume.toFixed(1)} times average daily volume`
+                                : "Unusual volume"
+                            }
+                          >
+                            !
+                          </span>
+                        )}
                         <span className="rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                           {ASSET_TYPE_LABELS[(holding.assetType as AssetType) ?? "stock"]}
                         </span>

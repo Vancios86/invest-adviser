@@ -11,6 +11,8 @@ export type Quote = {
   companyName?: string | null;
   changePercent?: number | null;
   previousClose?: number | null;
+  volume?: number | null;
+  averageVolume?: number | null;
   marketState?: string | null;
   source?: "yahoo" | "finnhub";
 };
@@ -27,6 +29,8 @@ export type HoldingWithQuote = Holding & {
   gainLossPct: number | null;
   gainLossAbs: number | null;
   dayChangePct: number | null;
+  relativeVolume: number | null;
+  unusualVolume: boolean;
   portfolioWeight: number | null;
   isPositive: boolean | null;
 };
@@ -99,6 +103,7 @@ export type IndicatorSnapshot = {
   buyVolumePct20: number | null;
   cmf20: number | null;
   relativeVolume: number | null;
+  unusualVolume: boolean;
   volumeSignal: "buying" | "selling" | "neutral";
   trend: "bullish" | "bearish" | "neutral";
   fetchedAt: string;

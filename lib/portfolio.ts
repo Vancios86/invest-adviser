@@ -1,5 +1,9 @@
 import { convertAmount, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
 import { getQuoteSymbol } from "@/lib/holding-utils";
+import {
+  computeRelativeVolume,
+  isUnusualVolume,
+} from "@/lib/volume-utils";
 import type {
   AggregatedBubble,
   HoldingWithQuote,
@@ -94,6 +98,11 @@ export function computeHoldingMetrics(
       ? (valueForWeight / totalPortfolioValue) * 100
       : null;
 
+  const relativeVolume = computeRelativeVolume(
+    quote?.volume,
+    quote?.averageVolume,
+  );
+
   return {
     ...holding,
     purchaseCurrency,
@@ -105,6 +114,8 @@ export function computeHoldingMetrics(
     gainLossPct,
     gainLossAbs,
     dayChangePct: dayChangeFromQuote(quote, livePrice),
+    relativeVolume,
+    unusualVolume: isUnusualVolume(relativeVolume),
     portfolioWeight,
     isPositive: gainLossPct !== null ? gainLossPct >= 0 : null,
   };

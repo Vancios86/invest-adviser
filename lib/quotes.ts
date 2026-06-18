@@ -19,6 +19,9 @@ type YahooQuoteResult = {
   preMarketPrice?: number;
   regularMarketChangePercent?: number;
   regularMarketPreviousClose?: number;
+  regularMarketVolume?: number;
+  averageDailyVolume3Month?: number;
+  averageDailyVolume10Day?: number;
   marketState?: string;
 };
 
@@ -53,6 +56,24 @@ function parseYahooQuote(quote: YahooQuoteResult): Quote | null {
 
   if (typeof price !== "number" || Number.isNaN(price)) return null;
 
+  const volume =
+    typeof quote.regularMarketVolume === "number" &&
+    Number.isFinite(quote.regularMarketVolume) &&
+    quote.regularMarketVolume >= 0
+      ? quote.regularMarketVolume
+      : null;
+
+  const averageVolume =
+    typeof quote.averageDailyVolume3Month === "number" &&
+    Number.isFinite(quote.averageDailyVolume3Month) &&
+    quote.averageDailyVolume3Month > 0
+      ? quote.averageDailyVolume3Month
+      : typeof quote.averageDailyVolume10Day === "number" &&
+          Number.isFinite(quote.averageDailyVolume10Day) &&
+          quote.averageDailyVolume10Day > 0
+        ? quote.averageDailyVolume10Day
+        : null;
+
   return {
     price,
     currency: quote.currency ?? "USD",
@@ -60,6 +81,8 @@ function parseYahooQuote(quote: YahooQuoteResult): Quote | null {
     companyName: quote.shortName ?? quote.longName ?? null,
     changePercent: quote.regularMarketChangePercent ?? null,
     previousClose: quote.regularMarketPreviousClose ?? null,
+    volume,
+    averageVolume,
     marketState: quote.marketState ?? null,
     source: "yahoo",
   };
@@ -181,6 +204,8 @@ async function fetchFromFinnhub(symbols: string[]): Promise<QuotesMap> {
           fetchedAt: new Date(data.t * 1000).toISOString(),
           changePercent: typeof data.dp === "number" ? data.dp : null,
           previousClose: typeof data.pc === "number" ? data.pc : null,
+          volume: null,
+          averageVolume: null,
           marketState: null,
           source: "finnhub",
         };

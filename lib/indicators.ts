@@ -1,5 +1,6 @@
 import { yahooFinance } from "@/lib/yahoo";
 import { ANALYSIS_CACHE_TTL_MS, getCached, setCached } from "@/lib/cache";
+import { isUnusualVolume } from "@/lib/volume-utils";
 import type { IndicatorSnapshot } from "@/lib/types";
 
 type OhlcRow = {
@@ -188,6 +189,7 @@ export async function fetchIndicators(
     buyVolumePct20,
     cmf20,
     relativeVolume,
+    unusualVolume: isUnusualVolume(relativeVolume),
     volumeSignal: volumeSignalFromMetrics(buyVolumePct20, cmf20),
     trend:
       currentPrice !== null

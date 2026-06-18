@@ -69,7 +69,11 @@ export function AddStockForm({ onAdded }: AddStockFormProps) {
         throw new Error(data.error ?? "Failed to add holding");
       }
 
-      toast.success(`${data.symbol} added to portfolio`);
+      toast.success(
+        response.status === 201
+          ? `${data.symbol} added to portfolio`
+          : `${data.symbol} merged — avg cost updated`,
+      );
       setSymbol("");
       setShares("");
       setPurchasePrice("");
