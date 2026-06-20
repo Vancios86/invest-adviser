@@ -3,6 +3,7 @@ import { runAnalysisPipeline } from "@/lib/agents/pipeline";
 import { fetchEurUsdRate } from "@/lib/currency";
 import { fetchStockData } from "@/lib/analysis-data";
 import { db } from "@/lib/db";
+import { runAnalysisWithGemini } from "@/lib/llm/gemini";
 import {
   aggregatePositionFromHoldings,
   computePortfolioSummary,
@@ -75,13 +76,24 @@ export async function POST(request: Request) {
       }
     }
 
-    const report = runAnalysisPipeline({
+    const baseline = runAnalysisPipeline({
       symbol,
       companyName: data.financials.companyName,
       data,
       position,
       portfolioSummary,
     });
+
+    const report = await runAnalysisWithGemini(
+      {
+        symbol,
+        companyName: data.financials.companyName,
+        data,
+        position,
+        portfolioSummary,
+      },
+      baseline,
+    );
 
     const saved = await db.analysisReport.create({
       data: {
@@ -91,6 +103,8 @@ export async function POST(request: Request) {
         confidence: report.confidence,
         executiveSummary: report.executiveSummary,
         agentOutputs: JSON.stringify(report.agentOutputs),
+        analysisMode: report.analysisMode ?? "rules",
+        llmModel: report.llmModel ?? null,
       },
     });
 
@@ -124,6 +138,8 @@ export async function GET() {
         confidence: report.confidence,
         executiveSummary: report.executiveSummary,
         agentOutputs: JSON.parse(report.agentOutputs),
+        analysisMode: report.analysisMode,
+        llmModel: report.llmModel,
         generatedAt: report.createdAt.toISOString(),
       })),
     );

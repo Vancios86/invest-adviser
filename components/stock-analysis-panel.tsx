@@ -194,9 +194,10 @@ export function StockAnalysisPanel({
         </DialogHeader>
 
         {isLoading && (
-          <div className="flex min-h-[200px] items-center justify-center gap-2 text-muted-foreground">
+          <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
-            Running multi-agent analysis...
+            <span>Running multi-agent analysis...</span>
+            <span className="text-xs">Fetching market data, then enriching with Gemini when configured</span>
           </div>
         )}
 
@@ -229,6 +230,19 @@ export function StockAnalysisPanel({
                 >
                   {recStyle.label} · {(result.confidence * 100).toFixed(0)}% conf.
                 </div>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {result.analysisMode === "gemini" && (
+                <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-medium text-violet-300">
+                  Narratives by Gemini{result.llmModel ? ` · ${result.llmModel}` : ""}
+                </span>
+              )}
+              {result.llmFallbackReason && (
+                <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs text-amber-400">
+                  Gemini unavailable — rule-based narratives used
+                </span>
               )}
             </div>
 

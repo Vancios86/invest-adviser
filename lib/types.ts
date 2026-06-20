@@ -174,6 +174,8 @@ export type AnalysisContext = {
   portfolioSummary?: PortfolioSummary;
 };
 
+export type AnalysisMode = "rules" | "gemini";
+
 export type AnalysisReport = {
   id?: string;
   symbol: string;
@@ -184,4 +186,7 @@ export type AnalysisReport = {
   generatedAt: string;
   position?: PositionContext;
   disclaimer: string;
+  analysisMode?: AnalysisMode;
+  llmModel?: string;
+  llmFallbackReason?: string;
 };
