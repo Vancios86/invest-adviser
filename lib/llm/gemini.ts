@@ -1,11 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 import {
-  buildGeminiContextPayload,
-  GEMINI_ENRICHMENT_SCHEMA,
-  GEMINI_ENRICHMENT_SYSTEM,
-  type GeminiEnrichmentResult,
+  AGENT_GEMINI_SYSTEM,
+  buildAgentGeminiPayload,
+  buildExecutiveSummaryPayload,
+  ENRICHABLE_AGENT_ROLES,
+  GEMINI_AGENT_NARRATIVE_SCHEMA,
+  GEMINI_EXECUTIVE_SUMMARY_SCHEMA,
+  GEMINI_EXECUTIVE_SUMMARY_SYSTEM,
+  type GeminiAgentNarrative,
+  type GeminiExecutiveSummaryResult,
 } from "@/lib/llm/prompts";
-import type { AnalysisContext, AnalysisReport } from "@/lib/types";
+import type {
+  AgentOutput,
+  AgentRole,
+  AnalysisContext,
+  AnalysisReport,
+} from "@/lib/types";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 
@@ -23,12 +33,126 @@ export function getGeminiModel(): string {
   return process.env.GEMINI_MODEL ?? DEFAULT_MODEL;
 }
 
-function parseEnrichment(raw: string): GeminiEnrichmentResult {
-  const parsed = JSON.parse(raw) as GeminiEnrichmentResult;
-  if (!parsed.executiveSummary || !Array.isArray(parsed.agents)) {
-    throw new Error("Invalid Gemini enrichment shape");
+function parseAgentNarrative(raw: string): GeminiAgentNarrative {
+  const parsed = JSON.parse(raw) as GeminiAgentNarrative;
+  if (!Array.isArray(parsed.keyPoints) || !Array.isArray(parsed.concerns)) {
+    throw new Error("Invalid agent narrative shape");
   }
   return parsed;
+}
+
+function parseExecutiveSummary(raw: string): GeminiExecutiveSummaryResult {
+  const parsed = JSON.parse(raw) as GeminiExecutiveSummaryResult;
+  if (!parsed.executiveSummary) {
+    throw new Error("Invalid executive summary shape");
+  }
+  return parsed;
+}
+
+async function enrichSingleAgent(
+  client: GoogleGenAI,
+  model: string,
+  role: AgentRole,
+  context: AnalysisContext,
+  baseline: AnalysisReport,
+): Promise<AgentOutput> {
+  const baselineAgent = baseline.agentOutputs.find((agent) => agent.role === role);
+  if (!baselineAgent) {
+    throw new Error(`Missing baseline agent: ${role}`);
+  }
+
+  const payload = buildAgentGeminiPayload(role, context, baseline);
+
+  const response = await client.models.generateContent({
+    model,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `Rewrite the ${baselineAgent.displayName} commentary for ${context.symbol} (${context.companyName}).
+
+Fixed signal: ${baselineAgent.signal}
+Fixed confidence: ${(baselineAgent.confidence * 100).toFixed(0)}%
+
+Context and baseline narrative:
+${payload}`,
+          },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: AGENT_GEMINI_SYSTEM[role],
+      responseMimeType: "application/json",
+      responseSchema: GEMINI_AGENT_NARRATIVE_SCHEMA,
+      temperature: 0.4,
+    },
+  });
+
+  const text = response.text;
+  if (!text) {
+    throw new Error(`Empty Gemini response for ${role}`);
+  }
+
+  const narrative = parseAgentNarrative(text);
+
+  return {
+    ...baselineAgent,
+    keyPoints:
+      narrative.keyPoints.length > 0
+        ? narrative.keyPoints
+        : baselineAgent.keyPoints,
+    concerns:
+      narrative.concerns.length > 0
+        ? narrative.concerns
+        : baselineAgent.concerns,
+  };
+}
+
+async function enrichExecutiveSummary(
+  client: GoogleGenAI,
+  model: string,
+  context: AnalysisContext,
+  baseline: AnalysisReport,
+  enrichedAgents: AgentOutput[],
+): Promise<string> {
+  const payload = buildExecutiveSummaryPayload(
+    context,
+    baseline,
+    enrichedAgents,
+  );
+
+  const response = await client.models.generateContent({
+    model,
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: `Write the executive summary for this committee report.
+
+Recommendation: ${baseline.recommendation.toUpperCase()} (${(baseline.confidence * 100).toFixed(0)}% confidence)
+
+Committee report:
+${payload}`,
+          },
+        ],
+      },
+    ],
+    config: {
+      systemInstruction: GEMINI_EXECUTIVE_SUMMARY_SYSTEM,
+      responseMimeType: "application/json",
+      responseSchema: GEMINI_EXECUTIVE_SUMMARY_SCHEMA,
+      temperature: 0.35,
+    },
+  });
+
+  const text = response.text;
+  if (!text) {
+    throw new Error("Empty Gemini executive summary response");
+  }
+
+  return parseExecutiveSummary(text).executiveSummary;
 }
 
 export async function enrichReportWithGemini(
@@ -41,57 +165,58 @@ export async function enrichReportWithGemini(
   }
 
   const model = getGeminiModel();
-  const payload = buildGeminiContextPayload(context, baseline);
 
-  const response = await client.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Enhance the committee narratives for this stock analysis.\n\nBaseline recommendation: ${baseline.recommendation} (${(baseline.confidence * 100).toFixed(0)}% confidence)\n\nData and baseline report:\n${payload}`,
-          },
-        ],
-      },
-    ],
-    config: {
-      systemInstruction: GEMINI_ENRICHMENT_SYSTEM,
-      responseMimeType: "application/json",
-      responseSchema: GEMINI_ENRICHMENT_SCHEMA,
-      temperature: 0.4,
-    },
-  });
-
-  const text = response.text;
-  if (!text) {
-    throw new Error("Empty Gemini response");
-  }
-
-  const enrichment = parseEnrichment(text);
-  const enrichmentByRole = new Map(
-    enrichment.agents.map((agent) => [agent.role, agent]),
+  const enrichmentResults = await Promise.allSettled(
+    ENRICHABLE_AGENT_ROLES.map((role) =>
+      enrichSingleAgent(client, model, role, context, baseline),
+    ),
   );
 
-  const agentOutputs = baseline.agentOutputs.map((agent) => {
-    const enriched = enrichmentByRole.get(agent.role);
-    if (!enriched) return agent;
+  const enrichedByRole = new Map<AgentRole, AgentOutput>();
+  const failedRoles: string[] = [];
 
-    return {
-      ...agent,
-      keyPoints:
-        enriched.keyPoints.length > 0 ? enriched.keyPoints : agent.keyPoints,
-      concerns:
-        enriched.concerns.length > 0 ? enriched.concerns : agent.concerns,
-    };
+  enrichmentResults.forEach((result, index) => {
+    const role = ENRICHABLE_AGENT_ROLES[index]!;
+    if (result.status === "fulfilled") {
+      enrichedByRole.set(role, result.value);
+      return;
+    }
+
+    failedRoles.push(role);
+    console.error(`Gemini enrichment failed for ${role}:`, result.reason);
+    const fallback = baseline.agentOutputs.find((agent) => agent.role === role);
+    if (fallback) {
+      enrichedByRole.set(role, fallback);
+    }
   });
+
+  const agentOutputs = baseline.agentOutputs.map(
+    (agent) => enrichedByRole.get(agent.role) ?? agent,
+  );
+
+  let executiveSummary = baseline.executiveSummary;
+  try {
+    executiveSummary = await enrichExecutiveSummary(
+      client,
+      model,
+      context,
+      baseline,
+      agentOutputs,
+    );
+  } catch (error) {
+    console.error("Gemini executive summary failed:", error);
+  }
 
   return {
     ...baseline,
-    executiveSummary: enrichment.executiveSummary || baseline.executiveSummary,
+    executiveSummary,
     agentOutputs,
     analysisMode: "gemini",
     llmModel: model,
+    llmFallbackReason:
+      failedRoles.length > 0
+        ? `Partial Gemini enrichment; rule-based text kept for: ${failedRoles.join(", ")}`
+        : undefined,
   };
 }
 
