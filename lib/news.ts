@@ -76,6 +76,74 @@ async function fetchFinnhubNews(symbol: string): Promise<NewsItem[]> {
   }));
 }
 
+async function fetchFinnhubMarketNews(): Promise<NewsItem[]> {
+  const apiKey = process.env.FINNHUB_API_KEY;
+  if (!apiKey) return [];
+
+  const url = new URL("https://finnhub.io/api/v1/news");
+  url.searchParams.set("category", "general");
+  url.searchParams.set("token", apiKey);
+
+  const response = await fetch(url, { next: { revalidate: 0 } });
+  if (!response.ok) return [];
+
+  const data = (await response.json()) as FinnhubNewsItem[];
+  return data.slice(0, 15).map((item) => ({
+    title: item.headline,
+    summary: item.summary ?? null,
+    url: item.url ?? null,
+    source: item.source ?? "Finnhub",
+    publishedAt: new Date(item.datetime * 1000).toISOString(),
+    sentiment: scoreHeadline(item.headline),
+  }));
+}
+
+export async function fetchMarketNews(): Promise<NewsSnapshot> {
+  const cacheKey = "news:__market__";
+  const cached = getCached<NewsSnapshot>(cacheKey);
+  if (cached) return cached;
+
+  let items = await fetchFinnhubMarketNews();
+
+  if (items.length === 0) {
+    const search = await yahooFinance.search("stock market", {
+      newsCount: 15,
+      quotesCount: 0,
+    });
+    items = (search.news ?? []).map((item) => ({
+      title: item.title,
+      summary: null,
+      url: item.link ?? null,
+      source: item.publisher ?? "Yahoo Finance",
+      publishedAt: item.providerPublishTime
+        ? new Date(item.providerPublishTime).toISOString()
+        : new Date().toISOString(),
+      sentiment: scoreHeadline(item.title),
+    }));
+  }
+
+  const positiveCount = items.filter((i) => i.sentiment === "positive").length;
+  const negativeCount = items.filter((i) => i.sentiment === "negative").length;
+  const neutralCount = items.length - positiveCount - negativeCount;
+
+  let overallSentiment: NewsSnapshot["overallSentiment"] = "neutral";
+  if (positiveCount > negativeCount + 1) overallSentiment = "positive";
+  else if (negativeCount > positiveCount + 1) overallSentiment = "negative";
+
+  const snapshot: NewsSnapshot = {
+    symbol: "__MARKET__",
+    items,
+    overallSentiment,
+    positiveCount,
+    negativeCount,
+    neutralCount,
+    fetchedAt: new Date().toISOString(),
+  };
+
+  setCached(cacheKey, snapshot, ANALYSIS_CACHE_TTL_MS);
+  return snapshot;
+}
+
 export async function fetchNews(symbol: string): Promise<NewsSnapshot> {
   const normalized = symbol.trim().toUpperCase();
   const cacheKey = `news:${normalized}`;

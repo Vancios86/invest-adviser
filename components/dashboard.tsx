@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { AddStockForm } from "@/components/add-stock-form";
 import { HoldingsTable } from "@/components/holdings-table";
+import { MarketBoardPanel } from "@/components/market-board-panel";
 import { PortfolioBubbleChart } from "@/components/portfolio-bubble-chart";
 import { PortfolioCategoryPie } from "@/components/portfolio-category-pie";
 import { PortfolioSummary } from "@/components/portfolio-summary";
@@ -35,6 +36,7 @@ export function Dashboard() {
   const [analysisHolding, setAnalysisHolding] = useState<HoldingWithQuote | null>(
     null,
   );
+  const [boardOpen, setBoardOpen] = useState(false);
 
   function openAnalysis(symbol: string, holding?: HoldingWithQuote) {
     setAnalysisSymbol(symbol);
@@ -209,16 +211,22 @@ export function Dashboard() {
             </p>
           )}
         </div>
-        <Button
-          variant="outline"
-          onClick={() => void refresh(true)}
-          disabled={isRefreshing}
-        >
-          <RefreshCw
-            className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
-          />
-          Refresh prices
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setBoardOpen(true)}>
+            <Sparkles className="mr-2 size-4" />
+            Board of Advisers
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void refresh(true)}
+            disabled={isRefreshing}
+          >
+            <RefreshCw
+              className={`mr-2 size-4 ${isRefreshing ? "animate-spin" : ""}`}
+            />
+            Refresh prices
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -264,6 +272,8 @@ export function Dashboard() {
         symbol={analysisSymbol}
         holding={analysisHolding}
       />
+
+      <MarketBoardPanel open={boardOpen} onOpenChange={setBoardOpen} />
     </div>
   );
 }

@@ -43,7 +43,7 @@ function parseAgentNarrative(raw: string): GeminiAgentNarrative {
 
 function parseExecutiveSummary(raw: string): GeminiExecutiveSummaryResult {
   const parsed = JSON.parse(raw) as GeminiExecutiveSummaryResult;
-  if (!parsed.executiveSummary) {
+  if (typeof parsed.executiveSummary !== "string") {
     throw new Error("Invalid executive summary shape");
   }
   return parsed;

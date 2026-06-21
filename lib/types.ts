@@ -190,3 +190,71 @@ export type AnalysisReport = {
   llmModel?: string;
   llmFallbackReason?: string;
 };
+
+// --- Market Board of Advisers (market-wide analysis) ---
+
+export type MarketSignal = "risk_on" | "risk_off" | "neutral";
+
+export type MarketRegime = "risk_on" | "risk_off" | "mixed";
+
+export type MarketInstrument = {
+  symbol: string;
+  name: string;
+  price: number | null;
+  changePercent: number | null;
+};
+
+export type SectorPerformance = {
+  symbol: string;
+  sector: string;
+  changePercent: number | null;
+  relativeVolume: number | null;
+  flowSignal: "accumulation" | "distribution" | "neutral";
+};
+
+export type MarketBreadth = {
+  advancers: number;
+  decliners: number;
+  unchanged: number;
+  advanceDeclineRatio: number | null;
+};
+
+export type MarketSnapshot = {
+  indices: MarketInstrument[];
+  volatility: MarketInstrument | null;
+  macro: MarketInstrument[];
+  sectors: SectorPerformance[];
+  breadth: MarketBreadth;
+  news: NewsSnapshot;
+  fetchedAt: string;
+};
+
+export type BoardRole =
+  | "macro"
+  | "sector_rotation"
+  | "institutional_flow"
+  | "geopolitical"
+  | "chief_strategist";
+
+export type BoardMemberOutput = {
+  role: BoardRole;
+  displayName: string;
+  signal: MarketSignal;
+  confidence: number;
+  keyPoints: string[];
+  watchItems: string[];
+};
+
+export type MarketBoardReport = {
+  id?: string;
+  regime: MarketRegime;
+  confidence: number;
+  executiveSummary: string;
+  members: BoardMemberOutput[];
+  snapshot: MarketSnapshot;
+  generatedAt: string;
+  analysisMode?: AnalysisMode;
+  llmModel?: string;
+  llmFallbackReason?: string;
+  disclaimer: string;
+};
