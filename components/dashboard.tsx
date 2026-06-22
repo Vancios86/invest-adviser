@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw, Sparkles } from "lucide-react";
+import { RefreshCw, Sparkles, Telescope } from "lucide-react";
 import { toast } from "sonner";
 import { AddStockForm } from "@/components/add-stock-form";
 import { HoldingsTable } from "@/components/holdings-table";
 import { MarketBoardPanel } from "@/components/market-board-panel";
+import { OpportunityScannerPanel } from "@/components/opportunity-scanner-panel";
 import { PortfolioBubbleChart } from "@/components/portfolio-bubble-chart";
 import { PortfolioCategoryPie } from "@/components/portfolio-category-pie";
 import { PortfolioSummary } from "@/components/portfolio-summary";
@@ -37,6 +38,7 @@ export function Dashboard() {
     null,
   );
   const [boardOpen, setBoardOpen] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
 
   function openAnalysis(symbol: string, holding?: HoldingWithQuote) {
     setAnalysisSymbol(symbol);
@@ -212,6 +214,10 @@ export function Dashboard() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setScannerOpen(true)}>
+            <Telescope className="mr-2 size-4" />
+            Find Opportunities
+          </Button>
           <Button onClick={() => setBoardOpen(true)}>
             <Sparkles className="mr-2 size-4" />
             Board of Advisers
@@ -274,6 +280,12 @@ export function Dashboard() {
       />
 
       <MarketBoardPanel open={boardOpen} onOpenChange={setBoardOpen} />
+
+      <OpportunityScannerPanel
+        open={scannerOpen}
+        onOpenChange={setScannerOpen}
+        onAnalyze={(symbol) => openAnalysis(symbol)}
+      />
     </div>
   );
 }

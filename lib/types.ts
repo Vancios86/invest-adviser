@@ -258,3 +258,62 @@ export type MarketBoardReport = {
   llmFallbackReason?: string;
   disclaimer: string;
 };
+
+// --- Opportunity Scanner (volume-driven stock discovery) ---
+
+export type ScreenerSource = "most_actives" | "day_gainers" | "day_losers";
+
+export type VolumeCandidate = {
+  symbol: string;
+  companyName: string | null;
+  price: number | null;
+  changePercent: number | null;
+  volume: number | null;
+  averageVolume: number | null;
+  relativeVolume: number | null;
+  marketCap: number | null;
+  sources: ScreenerSource[];
+};
+
+export type CatalystSummary = {
+  hasCatalyst: boolean;
+  overallSentiment: "positive" | "negative" | "neutral";
+  positiveCount: number;
+  negativeCount: number;
+  neutralCount: number;
+  headlines: NewsItem[];
+};
+
+export type HealthRating = "strong" | "moderate" | "weak";
+
+export type HealthCheck = {
+  score: number;
+  rating: HealthRating;
+  positives: string[];
+  negatives: string[];
+};
+
+export type OpportunityVerdict = {
+  recommendation: Recommendation;
+  confidence: number;
+  summary: string;
+  bullishCount: number;
+  bearishCount: number;
+};
+
+export type StockOpportunity = {
+  candidate: VolumeCandidate;
+  catalyst: CatalystSummary;
+  health: HealthCheck;
+  verdict: OpportunityVerdict;
+  opportunityScore: number;
+};
+
+export type OpportunityScanReport = {
+  scannedAt: string;
+  universeSize: number;
+  analyzedCount: number;
+  minRelativeVolume: number;
+  opportunities: StockOpportunity[];
+  disclaimer: string;
+};
