@@ -10,6 +10,7 @@ import {
   type GeminiAgentNarrative,
   type GeminiExecutiveSummaryResult,
 } from "@/lib/llm/prompts";
+import { mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
 import type {
   AgentOutput,
   AgentRole,
@@ -63,31 +64,33 @@ async function enrichSingleAgent(
 
   const payload = buildAgentGeminiPayload(role, context, baseline);
 
-  const response = await client.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Rewrite the ${baselineAgent.displayName} commentary for ${context.symbol} (${context.companyName}).
+  const response = await withGeminiRetry(() =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Rewrite the ${baselineAgent.displayName} commentary for ${context.symbol} (${context.companyName}).
 
 Fixed signal: ${baselineAgent.signal}
 Fixed confidence: ${(baselineAgent.confidence * 100).toFixed(0)}%
 
 Context and baseline narrative:
 ${payload}`,
-          },
-        ],
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: AGENT_GEMINI_SYSTEM[role],
+        responseMimeType: "application/json",
+        responseSchema: GEMINI_AGENT_NARRATIVE_SCHEMA,
+        temperature: 0.4,
       },
-    ],
-    config: {
-      systemInstruction: AGENT_GEMINI_SYSTEM[role],
-      responseMimeType: "application/json",
-      responseSchema: GEMINI_AGENT_NARRATIVE_SCHEMA,
-      temperature: 0.4,
-    },
-  });
+    }),
+  );
 
   const text = response.text;
   if (!text) {
@@ -122,30 +125,32 @@ async function enrichExecutiveSummary(
     enrichedAgents,
   );
 
-  const response = await client.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Write the executive summary for this committee report.
+  const response = await withGeminiRetry(() =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Write the executive summary for this committee report.
 
 Recommendation: ${baseline.recommendation.toUpperCase()} (${(baseline.confidence * 100).toFixed(0)}% confidence)
 
 Committee report:
 ${payload}`,
-          },
-        ],
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: GEMINI_EXECUTIVE_SUMMARY_SYSTEM,
+        responseMimeType: "application/json",
+        responseSchema: GEMINI_EXECUTIVE_SUMMARY_SCHEMA,
+        temperature: 0.35,
       },
-    ],
-    config: {
-      systemInstruction: GEMINI_EXECUTIVE_SUMMARY_SYSTEM,
-      responseMimeType: "application/json",
-      responseSchema: GEMINI_EXECUTIVE_SUMMARY_SCHEMA,
-      temperature: 0.35,
-    },
-  });
+    }),
+  );
 
   const text = response.text;
   if (!text) {
@@ -166,10 +171,10 @@ export async function enrichReportWithGemini(
 
   const model = getGeminiModel();
 
-  const enrichmentResults = await Promise.allSettled(
-    ENRICHABLE_AGENT_ROLES.map((role) =>
-      enrichSingleAgent(client, model, role, context, baseline),
-    ),
+  const enrichmentResults = await mapWithConcurrency(
+    ENRICHABLE_AGENT_ROLES,
+    2,
+    (role) => enrichSingleAgent(client, model, role, context, baseline),
   );
 
   const enrichedByRole = new Map<AgentRole, AgentOutput>();

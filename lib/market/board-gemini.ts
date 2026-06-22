@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiModel, isGeminiConfigured } from "@/lib/llm/gemini";
+import { mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
 import {
   BOARD_MEMBER_SCHEMA,
   BOARD_MEMBER_SYSTEM,
@@ -50,31 +51,33 @@ async function enrichMember(
 
   const payload = buildBoardMemberPayload(role, report);
 
-  const response = await client.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Rewrite the ${baseline.displayName} commentary on the current market.
+  const response = await withGeminiRetry(() =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Rewrite the ${baseline.displayName} commentary on the current market.
 
 Fixed signal: ${baseline.signal}
 Fixed confidence: ${(baseline.confidence * 100).toFixed(0)}%
 
 Context and baseline narrative:
 ${payload}`,
-          },
-        ],
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: BOARD_MEMBER_SYSTEM[role],
+        responseMimeType: "application/json",
+        responseSchema: BOARD_MEMBER_SCHEMA,
+        temperature: 0.4,
       },
-    ],
-    config: {
-      systemInstruction: BOARD_MEMBER_SYSTEM[role],
-      responseMimeType: "application/json",
-      responseSchema: BOARD_MEMBER_SCHEMA,
-      temperature: 0.4,
-    },
-  });
+    }),
+  );
 
   const text = response.text;
   if (!text) throw new Error(`Empty Gemini response for ${role}`);
@@ -100,30 +103,32 @@ async function enrichSummary(
 ): Promise<string> {
   const payload = buildBoardSummaryPayload(report, enrichedMembers);
 
-  const response = await client.models.generateContent({
-    model,
-    contents: [
-      {
-        role: "user",
-        parts: [
-          {
-            text: `Write the executive summary for this market board briefing.
+  const response = await withGeminiRetry(() =>
+    client.models.generateContent({
+      model,
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Write the executive summary for this market board briefing.
 
 Regime: ${report.regime.toUpperCase()} (${(report.confidence * 100).toFixed(0)}% conviction)
 
 Board briefing:
 ${payload}`,
-          },
-        ],
+            },
+          ],
+        },
+      ],
+      config: {
+        systemInstruction: BOARD_SUMMARY_SYSTEM,
+        responseMimeType: "application/json",
+        responseSchema: BOARD_SUMMARY_SCHEMA,
+        temperature: 0.35,
       },
-    ],
-    config: {
-      systemInstruction: BOARD_SUMMARY_SYSTEM,
-      responseMimeType: "application/json",
-      responseSchema: BOARD_SUMMARY_SCHEMA,
-      temperature: 0.35,
-    },
-  });
+    }),
+  );
 
   const text = response.text;
   if (!text) throw new Error("Empty Gemini board summary response");
@@ -139,10 +144,10 @@ async function enrichBoardWithGemini(
 
   const model = getGeminiModel();
 
-  const results = await Promise.allSettled(
-    ENRICHABLE_BOARD_ROLES.map((role) =>
-      enrichMember(client, model, role, report),
-    ),
+  const results = await mapWithConcurrency(
+    ENRICHABLE_BOARD_ROLES,
+    2,
+    (role) => enrichMember(client, model, role, report),
   );
 
   const enrichedByRole = new Map<BoardRole, BoardMemberOutput>();
@@ -165,18 +170,26 @@ async function enrichBoardWithGemini(
   );
 
   let executiveSummary = report.executiveSummary;
+  let summaryEnriched = false;
   try {
-    executiveSummary = await enrichSummary(client, model, report, members);
+    const enriched = await enrichSummary(client, model, report, members);
+    if (enriched.length > 0) {
+      executiveSummary = enriched;
+      summaryEnriched = true;
+    }
   } catch (error) {
     console.error("Gemini board summary failed:", error);
   }
+
+  const anyMemberEnriched =
+    failedRoles.length < ENRICHABLE_BOARD_ROLES.length;
 
   return {
     ...report,
     executiveSummary,
     members,
-    analysisMode: "gemini",
-    llmModel: model,
+    analysisMode: anyMemberEnriched || summaryEnriched ? "gemini" : "rules",
+    llmModel: anyMemberEnriched || summaryEnriched ? model : undefined,
     llmFallbackReason:
       failedRoles.length > 0
         ? `Partial Gemini enrichment; rule-based text kept for: ${failedRoles.join(", ")}`
