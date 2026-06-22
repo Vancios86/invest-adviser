@@ -306,6 +306,8 @@ export type StockOpportunity = {
   catalyst: CatalystSummary;
   health: HealthCheck;
   verdict: OpportunityVerdict;
+  baseScore: number;
+  regimeAdjustment: number;
   opportunityScore: number;
 };
 
@@ -314,6 +316,8 @@ export type OpportunityScanReport = {
   universeSize: number;
   analyzedCount: number;
   minRelativeVolume: number;
+  marketRegime: MarketRegime;
+  marketRegimeConfidence: number;
   opportunities: StockOpportunity[];
   disclaimer: string;
 };

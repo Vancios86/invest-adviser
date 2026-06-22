@@ -1,9 +1,12 @@
 import { runAnalysisPipeline } from "@/lib/agents/pipeline";
 import { fetchStockData } from "@/lib/analysis-data";
+import { runBoardPipeline } from "@/lib/market/board";
+import { fetchMarketSnapshot } from "@/lib/market/market-data";
 import { assessHealth } from "@/lib/scanner/health";
 import { fetchVolumeUniverse } from "@/lib/scanner/screener";
 import type {
   CatalystSummary,
+  MarketRegime,
   NewsSnapshot,
   OpportunityScanReport,
   OpportunityVerdict,
@@ -42,7 +45,36 @@ const RECOMMENDATION_BIAS: Record<Recommendation, number> = {
   sell: -18,
 };
 
-function computeOpportunityScore(
+// How sensitive each verdict is to the macro backdrop. Long-leaning ideas
+// (buy/watch) are rewarded in risk-on tapes and penalized in risk-off ones;
+// defensive calls barely move.
+const REGIME_SENSITIVITY: Record<Recommendation, number> = {
+  buy: 1,
+  watch: 0.7,
+  hold: 0.4,
+  sell: 0.2,
+};
+
+const MAX_REGIME_SWING = 12;
+
+function computeRegimeAdjustment(
+  regime: MarketRegime,
+  regimeConfidence: number,
+  recommendation: Recommendation,
+): number {
+  const direction = regime === "risk_on" ? 1 : regime === "risk_off" ? -1 : 0;
+  if (direction === 0) return 0;
+
+  const adjustment =
+    direction *
+    regimeConfidence *
+    REGIME_SENSITIVITY[recommendation] *
+    MAX_REGIME_SWING;
+
+  return Math.round(adjustment);
+}
+
+function computeBaseScore(
   candidate: VolumeCandidate,
   catalyst: CatalystSummary,
   health: { score: number },
@@ -70,11 +102,13 @@ function computeOpportunityScore(
     score -= 6;
   }
 
-  return Math.round(Math.min(100, Math.max(0, score)));
+  return score;
 }
 
 async function analyzeCandidate(
   candidate: VolumeCandidate,
+  regime: MarketRegime,
+  regimeConfidence: number,
 ): Promise<StockOpportunity | null> {
   try {
     const data = await fetchStockData(candidate.symbol);
@@ -103,6 +137,16 @@ async function analyzeCandidate(
       bearishCount,
     };
 
+    const baseScore = computeBaseScore(candidate, catalyst, health, verdict);
+    const regimeAdjustment = computeRegimeAdjustment(
+      regime,
+      regimeConfidence,
+      verdict.recommendation,
+    );
+    const opportunityScore = Math.round(
+      Math.min(100, Math.max(0, baseScore + regimeAdjustment)),
+    );
+
     return {
       candidate: {
         ...candidate,
@@ -111,16 +155,27 @@ async function analyzeCandidate(
       catalyst,
       health,
       verdict,
-      opportunityScore: computeOpportunityScore(
-        candidate,
-        catalyst,
-        health,
-        verdict,
-      ),
+      baseScore: Math.round(Math.min(100, Math.max(0, baseScore))),
+      regimeAdjustment,
+      opportunityScore,
     };
   } catch (error) {
     console.error(`Failed to analyze candidate ${candidate.symbol}:`, error);
     return null;
+  }
+}
+
+async function getMarketRegime(): Promise<{
+  regime: MarketRegime;
+  confidence: number;
+}> {
+  try {
+    const snapshot = await fetchMarketSnapshot();
+    const board = runBoardPipeline(snapshot);
+    return { regime: board.regime, confidence: board.confidence };
+  } catch (error) {
+    console.error("Failed to read market regime for scan:", error);
+    return { regime: "mixed", confidence: 0 };
   }
 }
 
@@ -136,7 +191,10 @@ export async function runOpportunityScan(
     MAX_LIMIT,
   );
 
-  const universe = await fetchVolumeUniverse();
+  const [universe, regimeContext] = await Promise.all([
+    fetchVolumeUniverse(),
+    getMarketRegime(),
+  ]);
 
   const spikes = universe.filter(
     (candidate) =>
@@ -147,7 +205,9 @@ export async function runOpportunityScan(
   const shortlist = spikes.slice(0, limit);
 
   const settled = await Promise.allSettled(
-    shortlist.map((candidate) => analyzeCandidate(candidate)),
+    shortlist.map((candidate) =>
+      analyzeCandidate(candidate, regimeContext.regime, regimeContext.confidence),
+    ),
   );
 
   const opportunities = settled
@@ -163,6 +223,8 @@ export async function runOpportunityScan(
     universeSize: universe.length,
     analyzedCount: opportunities.length,
     minRelativeVolume,
+    marketRegime: regimeContext.regime,
+    marketRegimeConfidence: regimeContext.confidence,
     opportunities,
     disclaimer: SCANNER_DISCLAIMER,
   };

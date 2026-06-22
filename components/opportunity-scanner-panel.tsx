@@ -20,11 +20,33 @@ import {
 import type {
   CatalystSummary,
   HealthCheck,
+  MarketRegime,
   OpportunityScanReport,
   Recommendation,
   StockOpportunity,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+
+const REGIME_META: Record<
+  MarketRegime,
+  { label: string; className: string; note: string }
+> = {
+  risk_on: {
+    label: "Risk-On",
+    className: "border-green-500/30 bg-green-500/10 text-green-500",
+    note: "Long-leaning ideas are boosted.",
+  },
+  risk_off: {
+    label: "Risk-Off",
+    className: "border-red-500/30 bg-red-500/10 text-red-500",
+    note: "Long-leaning ideas are discounted.",
+  },
+  mixed: {
+    label: "Mixed",
+    className: "border-amber-500/30 bg-amber-500/10 text-amber-400",
+    note: "No regime adjustment applied.",
+  },
+};
 
 type OpportunityScannerPanelProps = {
   open: boolean;
@@ -191,6 +213,19 @@ function OpportunityCard({
             <span className="text-muted-foreground">Opportunity </span>
             <span className="font-semibold">{opportunity.opportunityScore}</span>
             <span className="text-muted-foreground">/100</span>
+            {opportunity.regimeAdjustment !== 0 && (
+              <span
+                className={cn(
+                  "ml-1",
+                  opportunity.regimeAdjustment > 0
+                    ? "text-green-500"
+                    : "text-red-500",
+                )}
+              >
+                ({opportunity.regimeAdjustment > 0 ? "+" : ""}
+                {opportunity.regimeAdjustment} regime)
+              </span>
+            )}
           </div>
         </div>
 
@@ -257,7 +292,7 @@ export function OpportunityScannerPanel({
   }
 
   useEffect(() => {
-    if (!open || report) return;
+    if (!open) return;
 
     let cancelled = false;
 
@@ -287,7 +322,7 @@ export function OpportunityScannerPanel({
     return () => {
       cancelled = true;
     };
-  }, [open, report, reloadToken]);
+  }, [open, reloadToken]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -305,7 +340,7 @@ export function OpportunityScannerPanel({
           committee for a verdict.
         </p>
 
-        {isLoading && (
+        {isLoading && !report && (
           <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-muted-foreground">
             <Loader2 className="size-5 animate-spin" />
             <span>Scanning for volume spikes...</span>
@@ -328,19 +363,52 @@ export function OpportunityScannerPanel({
           </div>
         )}
 
-        {report && !isLoading && (
-          <div className="space-y-4">
+        {report && !error && (
+          <div
+            className={cn("space-y-4", isLoading && "pointer-events-none opacity-60")}
+          >
+            {isLoading && (
+              <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Refreshing scan...
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 {report.analyzedCount} opportunit
                 {report.analyzedCount === 1 ? "y" : "ies"} from{" "}
                 {report.universeSize} screened ·{" "}
                 {report.minRelativeVolume.toFixed(1)}x+ relative volume
+                {" · "}updated{" "}
+                {new Date(report.scannedAt).toLocaleTimeString([], {
+                  hour: "numeric",
+                  minute: "2-digit",
+                })}
               </p>
-              <Button variant="outline" size="sm" onClick={reload}>
-                <RefreshCw className="mr-2 size-4" />
+              <Button variant="outline" size="sm" onClick={reload} disabled={isLoading}>
+                <RefreshCw
+                  className={cn("mr-2 size-4", isLoading && "animate-spin")}
+                />
                 Rescan
               </Button>
+            </div>
+
+            <div
+              className={cn(
+                "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border px-3 py-2 text-xs",
+                REGIME_META[report.marketRegime].className,
+              )}
+            >
+              <span className="font-semibold">
+                Market regime: {REGIME_META[report.marketRegime].label}
+                {report.marketRegimeConfidence > 0
+                  ? ` (${(report.marketRegimeConfidence * 100).toFixed(0)}%)`
+                  : ""}
+              </span>
+              <span className="opacity-80">
+                {REGIME_META[report.marketRegime].note}
+              </span>
             </div>
 
             {report.opportunities.length === 0 ? (
