@@ -121,13 +121,18 @@ export type IndicatorSnapshot = {
   currentPrice: number | null;
   sma20: number | null;
   sma50: number | null;
+  sma150: number | null;
   sma200: number | null;
+  sma150SlopePct: number | null;
+  high20d: number | null;
+  drawdownFromHigh20Pct: number | null;
   rsi14: number | null;
   change30d: number | null;
   buyVolumePct20: number | null;
   cmf20: number | null;
   relativeVolume: number | null;
   unusualVolume: boolean;
+  recentPanicSell: boolean;
   volumeSignal: "buying" | "selling" | "neutral";
   trend: "bullish" | "bearish" | "neutral";
   fetchedAt: string;
@@ -275,6 +280,7 @@ export type MarketBoardReport = {
   confidence: number;
   executiveSummary: string;
   members: BoardMemberOutput[];
+  watchlistTiming: WatchlistTimingReport;
   snapshot: MarketSnapshot;
   generatedAt: string;
   analysisMode?: AnalysisMode;
@@ -357,4 +363,32 @@ export type WatchlistItem = {
   note: string | null;
   targetPrice: number | null;
   createdAt: string;
+};
+
+export type TimingPillarVerdict = "bullish" | "bearish" | "neutral" | "insufficient";
+
+export type TimingPillar = {
+  id: "flow" | "trend" | "pullback";
+  label: string;
+  verdict: TimingPillarVerdict;
+  summary: string;
+};
+
+export type WatchlistTimingVerdict = "opportunity" | "watch" | "avoid";
+
+export type WatchlistTimingEntry = {
+  symbol: string;
+  quoteSymbol: string;
+  companyName: string | null;
+  targetPrice: number | null;
+  livePrice: number | null;
+  verdict: WatchlistTimingVerdict;
+  pillars: TimingPillar[];
+  notes: string[];
+  sources: Array<"watchlist" | "holding">;
+};
+
+export type WatchlistTimingReport = {
+  entries: WatchlistTimingEntry[];
+  disclaimer: string;
 };

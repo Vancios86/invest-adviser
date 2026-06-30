@@ -8,6 +8,7 @@ import type {
   MarketSnapshot,
   SectorPerformance,
 } from "@/lib/types";
+import { WATCHLIST_TIMING_DISCLAIMER } from "@/lib/watchlist/timing";
 
 export const BOARD_DEFINITIONS: Record<
   BoardRole,
@@ -445,6 +446,7 @@ export function runBoardPipeline(snapshot: MarketSnapshot): MarketBoardReport {
     confidence,
     executiveSummary: buildExecutiveSummary(regime, confidence, deskMembers),
     members: [...deskMembers, chief],
+    watchlistTiming: { entries: [], disclaimer: WATCHLIST_TIMING_DISCLAIMER },
     snapshot,
     generatedAt: new Date().toISOString(),
     analysisMode: "rules",

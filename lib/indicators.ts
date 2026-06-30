@@ -114,6 +114,36 @@ function volumeSignalFromMetrics(
   return "neutral";
 }
 
+function detectRecentPanicSell(rows: OhlcRow[]): boolean {
+  if (rows.length < 25) return false;
+
+  const window = rows.slice(-5);
+  for (let i = 0; i < window.length; i += 1) {
+    const rowIndex = rows.length - 5 + i;
+    const row = window[i]!;
+    const prev = rows[rowIndex - 1];
+    if (!prev || prev.close <= 0) continue;
+
+    const dayChangePct = ((row.close - prev.close) / prev.close) * 100;
+    if (dayChangePct > -2) continue;
+
+    const avgVolume = computeSma(
+      rows.slice(rowIndex - 20, rowIndex).map((r) => r.volume),
+      20,
+    );
+    if (avgVolume === null || avgVolume <= 0) continue;
+
+    if (row.volume / avgVolume >= 1.3) return true;
+  }
+
+  return false;
+}
+
+function computeHigh20d(closes: number[]): number | null {
+  if (closes.length < 20) return null;
+  return Math.max(...closes.slice(-20));
+}
+
 function trendFromPrice(
   price: number,
   sma20: number | null,
@@ -166,11 +196,24 @@ export async function fetchIndicators(
   const currentPrice = closes.at(-1) ?? null;
   const sma20 = computeSma(closes, 20);
   const sma50 = computeSma(closes, 50);
+  const sma150 = computeSma(closes, 150);
   const sma200 = computeSma(closes, 200);
+  const sma150Prior =
+    closes.length >= 170 ? computeSma(closes.slice(0, -20), 150) : null;
+  const sma150SlopePct =
+    sma150 !== null && sma150Prior !== null && sma150Prior > 0
+      ? ((sma150 - sma150Prior) / sma150Prior) * 100
+      : null;
+  const high20d = computeHigh20d(closes);
+  const drawdownFromHigh20Pct =
+    currentPrice !== null && high20d !== null && high20d > 0
+      ? ((currentPrice - high20d) / high20d) * 100
+      : null;
   const rsi14 = computeRsi(closes, 14);
   const buyVolumePct20 = computeBuyVolumePct(sorted, 20);
   const cmf20 = computeCmf(sorted, 20);
   const relativeVolume = computeRelativeVolume(sorted, 20);
+  const recentPanicSell = detectRecentPanicSell(sorted);
 
   const change30d =
     closes.length >= 22 && currentPrice !== null
@@ -183,13 +226,18 @@ export async function fetchIndicators(
     currentPrice,
     sma20,
     sma50,
+    sma150,
     sma200,
+    sma150SlopePct,
+    high20d,
+    drawdownFromHigh20Pct,
     rsi14,
     change30d,
     buyVolumePct20,
     cmf20,
     relativeVolume,
     unusualVolume: isUnusualVolume(relativeVolume),
+    recentPanicSell,
     volumeSignal: volumeSignalFromMetrics(buyVolumePct20, cmf20),
     trend:
       currentPrice !== null
