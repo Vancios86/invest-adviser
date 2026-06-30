@@ -360,6 +360,8 @@ function resolveSummaryCurrency(): PortfolioCurrency {
 export function computePortfolioSummary(
   holdings: HoldingWithQuote[],
   eurUsdRate: number | null,
+  cash: { cashUsd: number; cashEur: number } = { cashUsd: 0, cashEur: 0 },
+  realizedGainLoss = 0,
 ): PortfolioSummary {
   const currency = resolveSummaryCurrency();
   const hasUsdHoldings = holdings.some(
@@ -397,11 +399,31 @@ export function computePortfolioSummary(
   const totalGainLossPct =
     totalCostBasis > 0 ? (totalGainLossAbs / totalCostBasis) * 100 : 0;
 
+  const cashUsdInSummary = convertAmount(
+    cash.cashUsd,
+    "USD",
+    currency,
+    eurUsdRate,
+  );
+  const cashEurInSummary = convertAmount(
+    cash.cashEur,
+    "EUR",
+    currency,
+    eurUsdRate,
+  );
+  const availableCash = cashUsdInSummary + cashEurInSummary;
+  const totalNetWorth = totalValue + availableCash;
+
   return {
     totalValue,
     totalCostBasis,
     totalGainLossAbs,
     totalGainLossPct,
+    availableCash,
+    totalNetWorth,
+    realizedGainLoss,
+    cashUsd: cash.cashUsd,
+    cashEur: cash.cashEur,
     currency,
     hasMixedCurrencies,
     eurUsdRate,

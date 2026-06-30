@@ -4,13 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw, Sparkles, Telescope } from "lucide-react";
 import { toast } from "sonner";
 import { AddStockForm } from "@/components/add-stock-form";
+import { AnalyzeStockBar } from "@/components/analyze-stock-bar";
 import { HoldingsTable } from "@/components/holdings-table";
 import { MarketBoardPanel } from "@/components/market-board-panel";
 import { OpportunityScannerPanel } from "@/components/opportunity-scanner-panel";
 import { PortfolioBubbleChart } from "@/components/portfolio-bubble-chart";
+import { WatchlistPanel } from "@/components/watchlist-panel";
 import { PortfolioCategoryPie } from "@/components/portfolio-category-pie";
 import { PortfolioSummary } from "@/components/portfolio-summary";
 import { StockAnalysisPanel } from "@/components/stock-analysis-panel";
+import { TransactionHistory } from "@/components/transaction-history";
 import { Button } from "@/components/ui/button";
 import {
   aggregateBySymbol,
@@ -18,7 +21,7 @@ import {
   enrichHoldings,
 } from "@/lib/portfolio";
 import type { Holding } from "@/lib/generated/prisma/client";
-import type { HoldingWithQuote, QuotesMap } from "@/lib/types";
+import type { HoldingWithQuote, QuotesMap, TransactionRecord } from "@/lib/types";
 
 const QUOTE_REFRESH_MS = 5 * 60 * 1000;
 
@@ -39,6 +42,10 @@ export function Dashboard() {
   );
   const [boardOpen, setBoardOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
+  const [watchlistRefreshToken, setWatchlistRefreshToken] = useState(0);
+  const [cash, setCash] = useState({ cashUsd: 0, cashEur: 0 });
+  const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
+  const [realizedGainLoss, setRealizedGainLoss] = useState(0);
 
   function openAnalysis(symbol: string, holding?: HoldingWithQuote) {
     setAnalysisSymbol(symbol);
@@ -87,6 +94,30 @@ export function Dashboard() {
     }
   }, []);
 
+  const loadPortfolioMeta = useCallback(async () => {
+    const [cashResponse, txResponse] = await Promise.all([
+      fetch("/api/cash"),
+      fetch("/api/transactions"),
+    ]);
+
+    if (cashResponse.ok) {
+      const cashData = (await cashResponse.json()) as {
+        cashUsd: number;
+        cashEur: number;
+      };
+      setCash(cashData);
+    }
+
+    if (txResponse.ok) {
+      const txData = (await txResponse.json()) as {
+        transactions: TransactionRecord[];
+        realizedGainLoss: number;
+      };
+      setTransactions(txData.transactions);
+      setRealizedGainLoss(txData.realizedGainLoss);
+    }
+  }, []);
+
   const loadHoldings = useCallback(async () => {
     const response = await fetch("/api/holdings");
     if (!response.ok) {
@@ -95,8 +126,11 @@ export function Dashboard() {
 
     const data = (await response.json()) as Holding[];
     setHoldings(data);
-    await loadQuotes(data.map((h) => h.quoteSymbol ?? h.symbol));
-  }, [loadQuotes]);
+    await Promise.all([
+      loadQuotes(data.map((h) => h.quoteSymbol ?? h.symbol)),
+      loadPortfolioMeta(),
+    ]);
+  }, [loadQuotes, loadPortfolioMeta]);
 
   const refresh = useCallback(
     async (showToast = false) => {
@@ -160,9 +194,18 @@ export function Dashboard() {
   );
 
   const summary = useMemo(
-    () => computePortfolioSummary(enrichedHoldings, eurUsdRate),
-    [enrichedHoldings, eurUsdRate],
+    () =>
+      computePortfolioSummary(
+        enrichedHoldings,
+        eurUsdRate,
+        cash,
+        realizedGainLoss,
+      ),
+    [enrichedHoldings, eurUsdRate, cash, realizedGainLoss],
   );
+
+  const hasPortfolioOverview =
+    holdings.length > 0 || cash.cashUsd > 0 || cash.cashEur > 0;
 
   const quotedCount = enrichedHoldings.filter(
     (h) => h.livePrice !== null,
@@ -241,15 +284,23 @@ export function Dashboard() {
         </div>
       )}
 
-      {holdings.length > 0 && (
+      {hasPortfolioOverview && (
         <PortfolioSummary
           summary={summary}
           holdingsCount={holdings.length}
           quotedCount={quotedCount}
+          onCashUpdated={() => void loadPortfolioMeta()}
         />
       )}
 
       <AddStockForm onAdded={() => void refresh(false)} />
+
+      <AnalyzeStockBar onAnalyze={(symbol) => openAnalysis(symbol)} />
+
+      <WatchlistPanel
+        onAnalyze={(symbol) => openAnalysis(symbol)}
+        refreshToken={watchlistRefreshToken}
+      />
 
       {holdings.length > 0 && (
         <PortfolioCategoryPie
@@ -272,6 +323,8 @@ export function Dashboard() {
         onAnalyze={(holding) => openAnalysis(holding.symbol, holding)}
       />
 
+      <TransactionHistory transactions={transactions} />
+
       <StockAnalysisPanel
         open={analysisOpen}
         onOpenChange={setAnalysisOpen}
@@ -285,6 +338,9 @@ export function Dashboard() {
         open={scannerOpen}
         onOpenChange={setScannerOpen}
         onAnalyze={(symbol) => openAnalysis(symbol)}
+        onWatchlistChange={() =>
+          setWatchlistRefreshToken((token) => token + 1)
+        }
       />
     </div>
   );

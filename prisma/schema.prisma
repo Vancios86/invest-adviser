@@ -21,6 +21,41 @@ model Holding {
   reports       AnalysisReport[]
 }
 
+model PortfolioSettings {
+  id        String   @id @default("default")
+  cashUsd   Float    @default(0)
+  cashEur   Float    @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String
+  symbol      String
+  quoteSymbol String?
+  assetType   String   @default("stock")
+  companyName String?
+  shares      Float
+  price       Float
+  currency    String   @default("USD")
+  amount      Float
+  costBasis   Float?
+  gainLossAbs Float?
+  gainLossPct Float?
+  createdAt   DateTime @default(now())
+}
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  symbol      String   @unique
+  quoteSymbol String?
+  assetType   String   @default("stock")
+  companyName String?
+  note        String?
+  targetPrice Float?
+  createdAt   DateTime @default(now())
+}
+
 model AnalysisReport {
   id               String   @id @default(cuid())
   symbol           String

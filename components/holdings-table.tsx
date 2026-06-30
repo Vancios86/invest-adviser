@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Brain, Pencil, Trash2 } from "lucide-react";
+import { Brain, DollarSign, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,6 +78,11 @@ export function HoldingsTable({
   const [purchasePrice, setPurchasePrice] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [selling, setSelling] = useState<HoldingWithQuote | null>(null);
+  const [sellShares, setSellShares] = useState("");
+  const [sellPrice, setSellPrice] = useState("");
+  const [sellCurrency, setSellCurrency] = useState<PortfolioCurrency>("USD");
+  const [isSelling, setIsSelling] = useState(false);
 
   const sortedHoldings = [...holdings].sort((a, b) => {
     const aWeight = a.portfolioWeight;
@@ -174,6 +179,62 @@ export function HoldingsTable({
     setPurchaseCurrency("USD");
     setShares("");
     setPurchasePrice("");
+  }
+
+  function openSell(holding: HoldingWithQuote) {
+    setSelling(holding);
+    setSellShares(String(holding.shares));
+    setSellPrice(
+      holding.livePrice !== null ? String(holding.livePrice) : "",
+    );
+    setSellCurrency(holding.quoteCurrency);
+  }
+
+  function closeSell() {
+    setSelling(null);
+    setSellShares("");
+    setSellPrice("");
+    setSellCurrency("USD");
+  }
+
+  async function handleSell() {
+    if (!selling) return;
+    setIsSelling(true);
+
+    try {
+      const response = await fetch(`/api/holdings/${selling.id}/sell`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          shares: Number(sellShares),
+          salePrice: sellPrice ? Number(sellPrice) : undefined,
+          currency: sellCurrency,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to record sale");
+      }
+
+      const gainLoss = data.gainLossAbs as number;
+      const gainLabel =
+        gainLoss >= 0
+          ? `profit ${formatCurrency(gainLoss, sellCurrency)}`
+          : `loss ${formatCurrency(Math.abs(gainLoss), sellCurrency)}`;
+
+      toast.success(
+        `Sold ${data.transaction.shares} ${selling.symbol} · ${gainLabel}`,
+      );
+      closeSell();
+      onChanged();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Failed to record sale",
+      );
+    } finally {
+      setIsSelling(false);
+    }
   }
 
   async function handleSave() {
@@ -364,6 +425,14 @@ export function HoldingsTable({
                         <Button
                           variant="ghost"
                           size="icon-sm"
+                          onClick={() => openSell(holding)}
+                          aria-label={`Sell ${holding.symbol}`}
+                        >
+                          <DollarSign className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
                           onClick={() => openEdit(holding)}
                           aria-label={`Edit ${holding.symbol}`}
                         >
@@ -465,6 +534,85 @@ export function HoldingsTable({
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(selling)} onOpenChange={(open) => !open && closeSell()}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Sell {selling?.symbol}</DialogTitle>
+          </DialogHeader>
+          {selling && (
+            <div className="grid gap-4 py-2">
+              <p className="text-sm text-muted-foreground">
+                Record a sale to track realized profit/loss and add proceeds to
+                your available cash. You hold {selling.shares} shares at avg cost{" "}
+                {displayPurchasePrice(selling)}.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="sell-shares">Shares to sell</Label>
+                <Input
+                  id="sell-shares"
+                  type="number"
+                  min="0"
+                  step="any"
+                  max={selling.shares}
+                  value={sellShares}
+                  onChange={(e) => setSellShares(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sell-price">Sale price per share</Label>
+                <Input
+                  id="sell-price"
+                  type="number"
+                  min="0"
+                  step="any"
+                  value={sellPrice}
+                  onChange={(e) => setSellPrice(e.target.value)}
+                  placeholder={
+                    selling.livePrice !== null
+                      ? String(selling.livePrice)
+                      : "Enter price"
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="sell-currency">Proceeds currency</Label>
+                <select
+                  id="sell-currency"
+                  value={sellCurrency}
+                  onChange={(e) =>
+                    setSellCurrency(e.target.value as PortfolioCurrency)
+                  }
+                  className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  {CURRENCY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={closeSell}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSell}
+              disabled={
+                isSelling ||
+                !sellShares ||
+                Number(sellShares) <= 0 ||
+                !sellPrice ||
+                Number(sellPrice) <= 0
+              }
+            >
+              {isSelling ? "Recording..." : "Confirm sell"}
             </Button>
           </DialogFooter>
         </DialogContent>

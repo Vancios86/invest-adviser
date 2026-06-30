@@ -10,7 +10,7 @@ import {
   type GeminiAgentNarrative,
   type GeminiExecutiveSummaryResult,
 } from "@/lib/llm/prompts";
-import { mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
+import { getGeminiConcurrency, mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
 import type {
   AgentOutput,
   AgentRole,
@@ -173,7 +173,7 @@ export async function enrichReportWithGemini(
 
   const enrichmentResults = await mapWithConcurrency(
     ENRICHABLE_AGENT_ROLES,
-    2,
+    getGeminiConcurrency(),
     (role) => enrichSingleAgent(client, model, role, context, baseline),
   );
 
@@ -200,6 +200,7 @@ export async function enrichReportWithGemini(
   );
 
   let executiveSummary = baseline.executiveSummary;
+  let summaryEnriched = false;
   try {
     executiveSummary = await enrichExecutiveSummary(
       client,
@@ -208,20 +209,33 @@ export async function enrichReportWithGemini(
       baseline,
       agentOutputs,
     );
+    summaryEnriched = true;
   } catch (error) {
     console.error("Gemini executive summary failed:", error);
+  }
+
+  const anyAgentEnriched =
+    failedRoles.length < ENRICHABLE_AGENT_ROLES.length;
+  const geminiUsed = anyAgentEnriched || summaryEnriched;
+
+  const fallbackNotes: string[] = [];
+  if (failedRoles.length > 0) {
+    fallbackNotes.push(
+      `Partial Gemini enrichment; rule-based text kept for: ${failedRoles.join(", ")}`,
+    );
+  }
+  if (!summaryEnriched && anyAgentEnriched) {
+    fallbackNotes.push("Executive summary kept rule-based (Gemini quota or error)");
   }
 
   return {
     ...baseline,
     executiveSummary,
     agentOutputs,
-    analysisMode: "gemini",
-    llmModel: model,
+    analysisMode: geminiUsed ? "gemini" : "rules",
+    llmModel: geminiUsed ? model : undefined,
     llmFallbackReason:
-      failedRoles.length > 0
-        ? `Partial Gemini enrichment; rule-based text kept for: ${failedRoles.join(", ")}`
-        : undefined,
+      fallbackNotes.length > 0 ? fallbackNotes.join(" · ") : undefined,
   };
 }
 

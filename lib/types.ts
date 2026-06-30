@@ -56,9 +56,33 @@ export type PortfolioSummary = {
   totalCostBasis: number;
   totalGainLossAbs: number;
   totalGainLossPct: number;
+  availableCash: number;
+  totalNetWorth: number;
+  realizedGainLoss: number;
+  cashUsd: number;
+  cashEur: number;
   currency: PortfolioCurrency;
   hasMixedCurrencies: boolean;
   eurUsdRate: number | null;
+};
+
+export type TransactionType = "buy" | "sell";
+
+export type TransactionRecord = {
+  id: string;
+  type: TransactionType;
+  symbol: string;
+  quoteSymbol: string | null;
+  assetType: string;
+  companyName: string | null;
+  shares: number;
+  price: number;
+  currency: PortfolioCurrency;
+  amount: number;
+  costBasis: number | null;
+  gainLossAbs: number | null;
+  gainLossPct: number | null;
+  createdAt: string;
 };
 
 export type FinancialsSnapshot = {
@@ -320,4 +344,17 @@ export type OpportunityScanReport = {
   marketRegimeConfidence: number;
   opportunities: StockOpportunity[];
   disclaimer: string;
+};
+
+// --- Watchlist ---
+
+export type WatchlistItem = {
+  id: string;
+  symbol: string;
+  quoteSymbol: string | null;
+  assetType: AssetType;
+  companyName: string | null;
+  note: string | null;
+  targetPrice: number | null;
+  createdAt: string;
 };

@@ -1,6 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import { getGeminiModel, isGeminiConfigured } from "@/lib/llm/gemini";
-import { mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
+import { getGeminiConcurrency, mapWithConcurrency, withGeminiRetry } from "@/lib/llm/gemini-retry";
 import {
   BOARD_MEMBER_SCHEMA,
   BOARD_MEMBER_SYSTEM,
@@ -146,7 +146,7 @@ async function enrichBoardWithGemini(
 
   const results = await mapWithConcurrency(
     ENRICHABLE_BOARD_ROLES,
-    2,
+    getGeminiConcurrency(),
     (role) => enrichMember(client, model, role, report),
   );
 

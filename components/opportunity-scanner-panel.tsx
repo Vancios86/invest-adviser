@@ -7,8 +7,10 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
+  Star,
   Telescope,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -52,6 +54,7 @@ type OpportunityScannerPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAnalyze: (symbol: string) => void;
+  onWatchlistChange?: () => void;
 };
 
 const RECOMMENDATION_STYLES: Record<
@@ -148,10 +151,16 @@ function OpportunityCard({
   opportunity,
   rank,
   onAnalyze,
+  onAddToWatchlist,
+  isOnWatchlist,
+  isAdding,
 }: {
   opportunity: StockOpportunity;
   rank: number;
   onAnalyze: (symbol: string) => void;
+  onAddToWatchlist: (symbol: string) => void;
+  isOnWatchlist: boolean;
+  isAdding: boolean;
 }) {
   const { candidate, catalyst, health, verdict } = opportunity;
   const recStyle = RECOMMENDATION_STYLES[verdict.recommendation];
@@ -258,14 +267,34 @@ function OpportunityCard({
               {verdict.bullishCount} bullish / {verdict.bearishCount} bearish
             </span>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onAnalyze(candidate.symbol)}
-          >
-            <Brain className="mr-2 size-4" />
-            Full analysis
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={isOnWatchlist || isAdding}
+              onClick={() => onAddToWatchlist(candidate.symbol)}
+            >
+              <Star
+                className={cn(
+                  "mr-2 size-4",
+                  isOnWatchlist && "fill-current text-primary",
+                )}
+              />
+              {isOnWatchlist
+                ? "On watchlist"
+                : isAdding
+                  ? "Adding..."
+                  : "Watchlist"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onAnalyze(candidate.symbol)}
+            >
+              <Brain className="mr-2 size-4" />
+              Full analysis
+            </Button>
+          </div>
         </div>
 
         <p className="text-xs leading-relaxed text-muted-foreground">
@@ -280,15 +309,73 @@ export function OpportunityScannerPanel({
   open,
   onOpenChange,
   onAnalyze,
+  onWatchlistChange,
 }: OpportunityScannerPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<OpportunityScanReport | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [watchlistSymbols, setWatchlistSymbols] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [addingSymbol, setAddingSymbol] = useState<string | null>(null);
 
   function reload() {
     setReport(null);
     setReloadToken((token) => token + 1);
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    let cancelled = false;
+
+    async function loadWatchlist() {
+      try {
+        const response = await fetch("/api/watchlist");
+        if (!response.ok) return;
+        const items = (await response.json()) as { symbol: string }[];
+        if (!cancelled) {
+          setWatchlistSymbols(
+            new Set(items.map((item) => item.symbol.toUpperCase())),
+          );
+        }
+      } catch {
+        // non-blocking; add button still works without prefetch
+      }
+    }
+
+    void loadWatchlist();
+  }, [open, reloadToken]);
+
+  async function addToWatchlist(symbol: string) {
+    setAddingSymbol(symbol);
+    try {
+      const response = await fetch("/api/watchlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbol, assetType: "stock" }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error ?? "Failed to add to watchlist");
+      }
+
+      const savedSymbol = String(data.symbol ?? symbol).toUpperCase();
+      setWatchlistSymbols((current) => new Set([...current, savedSymbol]));
+      toast.success(
+        response.status === 201
+          ? `${savedSymbol} added to watchlist`
+          : `${savedSymbol} already on watchlist — entry updated`,
+      );
+      onWatchlistChange?.();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to add to watchlist",
+      );
+    } finally {
+      setAddingSymbol(null);
+    }
   }
 
   useEffect(() => {
@@ -427,6 +514,11 @@ export function OpportunityScannerPanel({
                       onOpenChange(false);
                       onAnalyze(symbol);
                     }}
+                    onAddToWatchlist={addToWatchlist}
+                    isOnWatchlist={watchlistSymbols.has(
+                      opportunity.candidate.symbol.toUpperCase(),
+                    )}
+                    isAdding={addingSymbol === opportunity.candidate.symbol}
                   />
                 ))}
               </div>

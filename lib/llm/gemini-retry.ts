@@ -1,5 +1,8 @@
 const RETRYABLE_PATTERN =
-  /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|rate limit/i;
+  /503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|high demand|rate limit|quota exceeded/i;
+
+const DEFAULT_MIN_INTERVAL_MS = 13_000;
+const DEFAULT_MAX_ATTEMPTS = 5;
 
 export function isRetryableGeminiError(error: unknown): boolean {
   if (!error || typeof error !== "object") {
@@ -17,15 +20,74 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function getMinRequestIntervalMs(): number {
+  const configured = Number(process.env.GEMINI_MIN_REQUEST_INTERVAL_MS);
+  if (Number.isFinite(configured) && configured >= 0) {
+    return configured;
+  }
+  return DEFAULT_MIN_INTERVAL_MS;
+}
+
+/** Parallel Gemini calls: 2 when paid (no throttling), 1 on free tier. */
+export function getGeminiConcurrency(): number {
+  return getMinRequestIntervalMs() === 0 ? 2 : 1;
+}
+
+let nextAvailableAt = 0;
+
+async function waitForRateLimitSlot(): Promise<void> {
+  const minIntervalMs = getMinRequestIntervalMs();
+  if (minIntervalMs === 0) return;
+
+  const now = Date.now();
+  const waitMs = Math.max(0, nextAvailableAt - now);
+  if (waitMs > 0) {
+    await delay(waitMs);
+  }
+  nextAvailableAt = Date.now() + minIntervalMs;
+}
+
+function parseRetryDelayMs(error: unknown): number | null {
+  const message = error instanceof Error ? error.message : String(error);
+
+  const retryInMatch = message.match(/retry in ([\d.]+)s/i);
+  if (retryInMatch) {
+    return Math.ceil(Number(retryInMatch[1]) * 1000) + 250;
+  }
+
+  const retryDelayMatch = message.match(/"retryDelay"\s*:\s*"([\d.]+)s"/i);
+  if (retryDelayMatch) {
+    return Math.ceil(Number(retryDelayMatch[1]) * 1000) + 250;
+  }
+
+  return null;
+}
+
+function computeRetryDelayMs(
+  error: unknown,
+  attempt: number,
+  baseDelayMs: number,
+): number {
+  const fromApi = parseRetryDelayMs(error);
+  if (fromApi !== null) {
+    return Math.max(fromApi, getMinRequestIntervalMs());
+  }
+
+  const jitter = Math.random() * 400;
+  return baseDelayMs * 2 ** (attempt - 1) + jitter;
+}
+
 export async function withGeminiRetry<T>(
   fn: () => Promise<T>,
   options?: { maxAttempts?: number; baseDelayMs?: number },
 ): Promise<T> {
-  const maxAttempts = options?.maxAttempts ?? 3;
+  const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS;
   const baseDelayMs = options?.baseDelayMs ?? 1200;
   let lastError: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await waitForRateLimitSlot();
+
     try {
       return await fn();
     } catch (error) {
@@ -34,8 +96,7 @@ export async function withGeminiRetry<T>(
         throw error;
       }
 
-      const jitter = Math.random() * 400;
-      await delay(baseDelayMs * 2 ** (attempt - 1) + jitter);
+      await delay(computeRetryDelayMs(error, attempt, baseDelayMs));
     }
   }
 

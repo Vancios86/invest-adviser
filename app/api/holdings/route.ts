@@ -11,6 +11,7 @@ import {
   parseAssetType,
   resolveQuoteSymbol,
 } from "@/lib/symbols";
+import { createTransaction } from "@/lib/transactions";
 
 export async function GET() {
   const holdings = await db.holding.findMany({
@@ -103,6 +104,18 @@ export async function POST(request: Request) {
         },
       });
 
+      await createTransaction({
+        type: "buy",
+        symbol: resolved.symbol,
+        quoteSymbol:
+          resolved.quoteSymbol !== resolved.symbol ? resolved.quoteSymbol : null,
+        assetType: resolved.assetType,
+        companyName: resolved.companyName,
+        shares,
+        price: purchasePrice,
+        currency: newPurchaseCurrency,
+      });
+
       return NextResponse.json(holding);
     }
 
@@ -117,6 +130,18 @@ export async function POST(request: Request) {
         purchaseCurrency: newPurchaseCurrency,
         purchaseDate,
       },
+    });
+
+    await createTransaction({
+      type: "buy",
+      symbol: resolved.symbol,
+      quoteSymbol:
+        resolved.quoteSymbol !== resolved.symbol ? resolved.quoteSymbol : null,
+      assetType: resolved.assetType,
+      companyName: resolved.companyName,
+      shares,
+      price: purchasePrice,
+      currency: newPurchaseCurrency,
     });
 
     return NextResponse.json(holding, { status: 201 });
