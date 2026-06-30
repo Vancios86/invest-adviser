@@ -322,6 +322,21 @@ export type WatchlistTimingInput = {
   sources: Array<"watchlist" | "holding">;
 };
 
+export function scoreStockTiming(input: {
+  symbol: string;
+  quoteSymbol: string;
+  companyName: string | null;
+  indicators: IndicatorSnapshot;
+  regime: MarketRegime;
+  targetPrice?: number | null;
+}): WatchlistTimingEntry {
+  return scoreWatchlistEntry({
+    ...input,
+    targetPrice: input.targetPrice ?? null,
+    sources: [],
+  });
+}
+
 export function scoreWatchlistEntry(
   input: WatchlistTimingInput,
 ): WatchlistTimingEntry {

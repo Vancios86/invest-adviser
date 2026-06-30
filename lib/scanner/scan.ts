@@ -1,7 +1,6 @@
 import { runAnalysisPipeline } from "@/lib/agents/pipeline";
 import { fetchStockData } from "@/lib/analysis-data";
-import { runBoardPipeline } from "@/lib/market/board";
-import { fetchMarketSnapshot } from "@/lib/market/market-data";
+import { getMarketRegime } from "@/lib/market/regime";
 import { assessHealth } from "@/lib/scanner/health";
 import { fetchVolumeUniverse } from "@/lib/scanner/screener";
 import type {
@@ -165,19 +164,6 @@ async function analyzeCandidate(
   }
 }
 
-async function getMarketRegime(): Promise<{
-  regime: MarketRegime;
-  confidence: number;
-}> {
-  try {
-    const snapshot = await fetchMarketSnapshot();
-    const board = runBoardPipeline(snapshot);
-    return { regime: board.regime, confidence: board.confidence };
-  } catch (error) {
-    console.error("Failed to read market regime for scan:", error);
-    return { regime: "mixed", confidence: 0 };
-  }
-}
 
 export async function runOpportunityScan(
   options: ScanOptions = {},

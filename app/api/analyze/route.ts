@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { runAnalysisPipeline } from "@/lib/agents/pipeline";
+import { buildCompanyIntro } from "@/lib/analysis/company-intro";
 import { fetchEurUsdRate } from "@/lib/currency";
 import { fetchStockData } from "@/lib/analysis-data";
 import { db } from "@/lib/db";
 import { runAnalysisWithGemini } from "@/lib/llm/gemini";
+import { getMarketRegime } from "@/lib/market/regime";
 import {
   aggregatePositionFromHoldings,
   computePortfolioSummary,
@@ -12,6 +14,10 @@ import {
 import { fetchQuotes } from "@/lib/quotes";
 import { getQuoteSymbol } from "@/lib/holding-utils";
 import { isValidSymbolFormat } from "@/lib/symbols";
+import {
+  scoreStockTiming,
+  WATCHLIST_TIMING_DISCLAIMER,
+} from "@/lib/watchlist/timing";
 import type { PositionContext } from "@/lib/types";
 
 export async function POST(request: Request) {
@@ -41,10 +47,13 @@ export async function POST(request: Request) {
       ]),
     ];
 
-    const [data, quotes, eurUsdRate] = await Promise.all([
+    const [data, quotes, eurUsdRate, regimeContext, watchlistItem] =
+      await Promise.all([
       fetchStockData(quoteSymbol),
       fetchQuotes(quoteSymbols),
       fetchEurUsdRate(),
+      getMarketRegime(),
+      db.watchlistItem.findFirst({ where: { symbol } }),
     ]);
 
     const enriched = enrichHoldings(holdings, quotes, eurUsdRate);
@@ -95,6 +104,23 @@ export async function POST(request: Request) {
       baseline,
     );
 
+    const companyIntro = buildCompanyIntro(data.financials);
+    const timing = scoreStockTiming({
+      symbol,
+      quoteSymbol,
+      companyName: data.financials.companyName,
+      indicators: data.indicators,
+      regime: regimeContext.regime,
+      targetPrice: watchlistItem?.targetPrice ?? null,
+    });
+
+    const enrichedReport = {
+      ...report,
+      companyIntro,
+      timing,
+      timingDisclaimer: WATCHLIST_TIMING_DISCLAIMER,
+    };
+
     const saved = await db.analysisReport.create({
       data: {
         symbol,
@@ -109,7 +135,7 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({
-      ...report,
+      ...enrichedReport,
       id: saved.id,
       data,
     });

@@ -34,6 +34,7 @@ import type {
   Recommendation,
   StockDataBundle,
 } from "@/lib/types";
+import { TimingAnalysisCard } from "@/components/timing-analysis-card";
 import { cn } from "@/lib/utils";
 
 type StockAnalysisPanelProps = {
@@ -246,6 +247,23 @@ export function StockAnalysisPanel({
               )}
             </div>
 
+            {result.companyIntro && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">About the company</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm leading-relaxed text-muted-foreground">
+                    {result.companyIntro}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {result.timing && (
+              <TimingAnalysisCard entry={result.timing} variant="inline" />
+            )}
+
             <p className="text-sm leading-relaxed">{result.executiveSummary}</p>
 
             {result.position && (
@@ -441,7 +459,15 @@ export function StockAnalysisPanel({
               </div>
             )}
 
-            <p className="text-xs text-muted-foreground">{result.disclaimer}</p>
+            <p className="text-xs text-muted-foreground">
+              {result.timingDisclaimer && (
+                <>
+                  {result.timingDisclaimer}
+                  <br />
+                </>
+              )}
+              {result.disclaimer}
+            </p>
           </div>
         )}
       </DialogContent>

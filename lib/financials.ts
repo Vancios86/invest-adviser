@@ -76,6 +76,11 @@ export async function fetchFinancials(
     analystHold: num(recommendationTrend?.hold),
     analystSell: num(recommendationTrend?.sell),
     analystStrongSell: num(recommendationTrend?.strongSell),
+    longBusinessSummary:
+      typeof profile?.longBusinessSummary === "string" &&
+      profile.longBusinessSummary.trim()
+        ? profile.longBusinessSummary.trim()
+        : null,
     fetchedAt: new Date().toISOString(),
   };
 

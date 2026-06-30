@@ -113,6 +113,7 @@ export type FinancialsSnapshot = {
   analystHold: number | null;
   analystSell: number | null;
   analystStrongSell: number | null;
+  longBusinessSummary: string | null;
   fetchedAt: string;
 };
 
@@ -218,6 +219,9 @@ export type AnalysisReport = {
   analysisMode?: AnalysisMode;
   llmModel?: string;
   llmFallbackReason?: string;
+  companyIntro?: string;
+  timing?: WatchlistTimingEntry;
+  timingDisclaimer?: string;
 };
 
 // --- Market Board of Advisers (market-wide analysis) ---
