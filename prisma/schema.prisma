@@ -57,15 +57,18 @@ model WatchlistItem {
 }
 
 model AnalysisReport {
-  id               String   @id @default(cuid())
-  symbol           String
-  holdingId        String?
-  holding          Holding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
-  recommendation   String
-  confidence       Float
-  executiveSummary String
-  agentOutputs     String
-  analysisMode     String   @default("rules")
-  llmModel         String?
-  createdAt        DateTime @default(now())
+  id                String   @id @default(cuid())
+  symbol            String
+  holdingId         String?
+  holding           Holding? @relation(fields: [holdingId], references: [id], onDelete: SetNull)
+  recommendation    String
+  confidence        Float
+  executiveSummary  String
+  agentOutputs      String
+  companyIntro      String?
+  timing            String?
+  timingDisclaimer  String?
+  analysisMode      String   @default("rules")
+  llmModel          String?
+  createdAt         DateTime @default(now())
 }

@@ -124,11 +124,16 @@ export async function POST(request: Request) {
     const saved = await db.analysisReport.create({
       data: {
         symbol,
-        holdingId: holdingId ?? null,
+        ...(holdingId
+          ? { holding: { connect: { id: holdingId } } }
+          : {}),
         recommendation: report.recommendation,
         confidence: report.confidence,
         executiveSummary: report.executiveSummary,
         agentOutputs: JSON.stringify(report.agentOutputs),
+        companyIntro,
+        timing: JSON.stringify(timing),
+        timingDisclaimer: WATCHLIST_TIMING_DISCLAIMER,
         analysisMode: report.analysisMode ?? "rules",
         llmModel: report.llmModel ?? null,
       },
@@ -164,6 +169,9 @@ export async function GET() {
         confidence: report.confidence,
         executiveSummary: report.executiveSummary,
         agentOutputs: JSON.parse(report.agentOutputs),
+        companyIntro: report.companyIntro,
+        timing: report.timing ? JSON.parse(report.timing) : null,
+        timingDisclaimer: report.timingDisclaimer,
         analysisMode: report.analysisMode,
         llmModel: report.llmModel,
         generatedAt: report.createdAt.toISOString(),
