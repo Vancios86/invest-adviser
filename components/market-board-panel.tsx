@@ -5,12 +5,14 @@ import {
   ExternalLink,
   Eye,
   Loader2,
+  MessageSquare,
   Minus,
   RefreshCw,
   Sparkles,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import { BoardChat } from "@/components/board-chat";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -34,6 +36,8 @@ type MarketBoardPanelProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 };
+
+type BoardTab = "briefing" | "chat";
 
 const REGIME_STYLES: Record<
   MarketRegime,
@@ -125,11 +129,16 @@ export function MarketBoardPanel({ open, onOpenChange }: MarketBoardPanelProps) 
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<MarketBoardReport | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
+  const [tab, setTab] = useState<BoardTab>("briefing");
 
   function reload() {
     setReport(null);
     setReloadToken((token) => token + 1);
   }
+
+  useEffect(() => {
+    if (!open) setTab("briefing");
+  }, [open]);
 
   useEffect(() => {
     if (!open || report) return;
@@ -179,13 +188,40 @@ export function MarketBoardPanel({ open, onOpenChange }: MarketBoardPanelProps) 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
+      <DialogContent
+        className={cn(
+          "max-h-[90vh] overflow-y-auto",
+          tab === "chat" ? "sm:max-w-4xl" : "sm:max-w-3xl",
+        )}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="size-5 text-primary" />
-            Board of Advisers — Market Briefing
+            Board of Advisers
           </DialogTitle>
         </DialogHeader>
+
+        {report && !isLoading && (
+          <div className="flex gap-2 border-b pb-3">
+            <Button
+              type="button"
+              variant={tab === "briefing" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTab("briefing")}
+            >
+              Market briefing
+            </Button>
+            <Button
+              type="button"
+              variant={tab === "chat" ? "default" : "outline"}
+              size="sm"
+              onClick={() => setTab("chat")}
+            >
+              <MessageSquare className="mr-2 size-4" />
+              Chat with the board
+            </Button>
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex min-h-[200px] flex-col items-center justify-center gap-2 text-muted-foreground">
@@ -210,7 +246,11 @@ export function MarketBoardPanel({ open, onOpenChange }: MarketBoardPanelProps) 
           </div>
         )}
 
-        {report && !isLoading && (
+        {report && !isLoading && tab === "chat" && (
+          <BoardChat key={report.generatedAt} report={report} />
+        )}
+
+        {report && !isLoading && tab === "briefing" && (
           <div className="space-y-6">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="space-y-1">

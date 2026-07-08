@@ -293,6 +293,19 @@ export type MarketBoardReport = {
   disclaimer: string;
 };
 
+export type BoardChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export type BoardChatResponse = {
+  reply: string;
+  researchSymbols?: string[];
+  analysisMode: AnalysisMode;
+  llmModel?: string;
+  refreshedMarket?: boolean;
+};
+
 // --- Opportunity Scanner (volume-driven stock discovery) ---
 
 export type ScreenerSource = "most_actives" | "day_gainers" | "day_losers";

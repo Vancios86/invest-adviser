@@ -26,6 +26,10 @@ function getClient(): GoogleGenAI | null {
   return new GoogleGenAI({ apiKey });
 }
 
+export function getGeminiClient(): GoogleGenAI | null {
+  return getClient();
+}
+
 export function isGeminiConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
