@@ -29,14 +29,40 @@ function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
+function quotesFromValidationError(error: unknown): ScreenerQuote[] | null {
+  if (
+    !error ||
+    typeof error !== "object" ||
+    !("result" in error) ||
+    !error.result ||
+    typeof error.result !== "object"
+  ) {
+    return null;
+  }
+
+  const quotes = (error.result as { quotes?: unknown }).quotes;
+  return Array.isArray(quotes) ? (quotes as ScreenerQuote[]) : null;
+}
+
 async function fetchScreen(source: ScreenerSource): Promise<ScreenerQuote[]> {
   try {
-    const result = await yahooFinance.screener({
-      scrIds: source,
-      count: SCREENER_COUNT,
-    });
+    const result = (await yahooFinance.screener(
+      {
+        scrIds: source,
+        count: SCREENER_COUNT,
+      },
+      undefined,
+      { validateResult: false },
+    )) as { quotes?: ScreenerQuote[] };
     return (result.quotes ?? []) as ScreenerQuote[];
   } catch (error) {
+    const recovered = quotesFromValidationError(error);
+    if (recovered) {
+      console.warn(
+        `Screener "${source}" failed validation but returned ${recovered.length} quotes; using them anyway.`,
+      );
+      return recovered;
+    }
     console.error(`Screener "${source}" failed:`, error);
     return [];
   }

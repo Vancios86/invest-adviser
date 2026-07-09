@@ -164,8 +164,12 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
       }
       toast.success(
         response.status === 201
-          ? `${data.symbol} added to watchlist`
-          : `${data.symbol} watchlist entry updated`,
+          ? data.companyName
+            ? `${data.symbol} (${data.companyName}) added to watchlist`
+            : `${data.symbol} added to watchlist`
+          : data.companyName
+            ? `${data.symbol} (${data.companyName}) watchlist entry updated`
+            : `${data.symbol} watchlist entry updated`,
       );
       setSymbol("");
       setTargetPrice("");
@@ -222,12 +226,12 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="wl-symbol">Symbol</Label>
+            <Label htmlFor="wl-symbol">Symbol or company</Label>
             <Input
               id="wl-symbol"
-              placeholder="NVDA"
+              placeholder="NVDA or NVIDIA"
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              onChange={(e) => setSymbol(e.target.value)}
               required
             />
           </div>
@@ -268,8 +272,8 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
             <Eye className="size-5" />
             <p>Nothing on your watchlist yet.</p>
             <p className="text-xs">
-              Add stocks with potential and set a target entry price to know when
-              the time is right.
+              Add stocks by ticker or company name, set a target entry price, and
+              track when the time is right.
             </p>
           </div>
         ) : (

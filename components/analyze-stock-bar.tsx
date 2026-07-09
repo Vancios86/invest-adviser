@@ -7,26 +7,24 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 
-const SYMBOL_PATTERN = /^[A-Z0-9.\-^]{1,12}$/;
-
 type AnalyzeStockBarProps = {
   onAnalyze: (symbol: string) => void;
 };
 
 export function AnalyzeStockBar({ onAnalyze }: AnalyzeStockBarProps) {
-  const [symbol, setSymbol] = useState("");
+  const [query, setQuery] = useState("");
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const normalized = symbol.trim().toUpperCase();
+    const trimmed = query.trim();
 
-    if (!normalized || !SYMBOL_PATTERN.test(normalized)) {
-      toast.error("Enter a valid ticker symbol (e.g. AAPL)");
+    if (!trimmed) {
+      toast.error("Enter a ticker or company name");
       return;
     }
 
-    onAnalyze(normalized);
-    setSymbol("");
+    onAnalyze(trimmed);
+    setQuery("");
   }
 
   return (
@@ -37,19 +35,20 @@ export function AnalyzeStockBar({ onAnalyze }: AnalyzeStockBarProps) {
       <CardContent>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
           <Input
-            placeholder="Enter a ticker (e.g. NVDA, TSLA, ASML)"
-            value={symbol}
-            onChange={(event) => setSymbol(event.target.value.toUpperCase())}
+            placeholder="NVDA or NVIDIA, Apple, ASML..."
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
             className="sm:max-w-xs"
-            aria-label="Ticker symbol to analyze"
+            aria-label="Ticker or company name to analyze"
           />
           <Button type="submit">
             <Brain className="mr-2 size-4" />
-            Run board analysis
+            Run analysis
           </Button>
         </form>
         <p className="mt-2 text-xs text-muted-foreground">
-          Runs the full multi-agent committee on any symbol — no need to own it.
+          Runs the full multi-agent committee on any symbol — use a ticker or
+          company name.
         </p>
       </CardContent>
     </Card>

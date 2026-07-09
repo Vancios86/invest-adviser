@@ -5,9 +5,8 @@ import {
   parsePurchaseCurrency,
 } from "@/lib/currency-utils";
 import {
-  isValidSymbolFormat,
   parseAssetType,
-  resolveQuoteSymbol,
+  resolveSymbolOrCompanyName,
 } from "@/lib/symbols";
 
 type RouteContext = {
@@ -35,23 +34,21 @@ export async function PATCH(request: Request, context: RouteContext) {
     } = {};
 
     if (body.symbol !== undefined || body.assetType !== undefined) {
-      const symbol = String(body.symbol ?? existing.symbol)
-        .trim()
-        .toUpperCase();
+      const rawInput = String(body.symbol ?? existing.symbol).trim();
       const assetType = parseAssetType(body.assetType ?? existing.assetType);
 
-      if (!symbol || !isValidSymbolFormat(symbol)) {
+      if (!rawInput) {
         return NextResponse.json(
-          { error: "Invalid symbol format" },
+          { error: "Enter a ticker symbol or company name" },
           { status: 400 },
         );
       }
 
-      const resolved = await resolveQuoteSymbol(symbol, assetType);
+      const resolved = await resolveSymbolOrCompanyName(rawInput, assetType);
       if (!resolved) {
         return NextResponse.json(
           {
-            error: `Could not find live market data for "${symbol}". Try the full Yahoo symbol (e.g. 4GLD.DE) or check the asset type.`,
+            error: `Could not find live market data for "${rawInput}". Try a ticker or company name.`,
           },
           { status: 400 },
         );

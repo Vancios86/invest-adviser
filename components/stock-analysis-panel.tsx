@@ -181,7 +181,7 @@ export function StockAnalysisPanel({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Brain className="size-5" />
-            {symbol ? `${symbol} Analysis` : "Stock Analysis"}
+            {symbol ? `${result?.symbol ?? symbol} Analysis` : "Stock Analysis"}
             {unusualVolume && (
               <span
                 className="text-base font-bold leading-none text-red-500"

@@ -7,9 +7,8 @@ import {
 import { fetchEurUsdRate } from "@/lib/currency";
 import { mergePurchaseLots } from "@/lib/holding-utils";
 import {
-  isValidSymbolFormat,
   parseAssetType,
-  resolveQuoteSymbol,
+  resolveSymbolOrCompanyName,
 } from "@/lib/symbols";
 import { createTransaction } from "@/lib/transactions";
 
@@ -23,9 +22,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const symbol = String(body.symbol ?? "")
-      .trim()
-      .toUpperCase();
+    const rawInput = String(body.symbol ?? body.query ?? "").trim();
     const assetType = parseAssetType(body.assetType);
     const shares = Number(body.shares);
     const purchasePrice = Number(body.purchasePrice);
@@ -36,9 +33,9 @@ export async function POST(request: Request) {
       ? new Date(body.purchaseDate)
       : undefined;
 
-    if (!symbol || !isValidSymbolFormat(symbol)) {
+    if (!rawInput) {
       return NextResponse.json(
-        { error: "Invalid symbol format" },
+        { error: "Enter a ticker symbol or company name" },
         { status: 400 },
       );
     }
@@ -57,11 +54,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const resolved = await resolveQuoteSymbol(symbol, assetType);
+    const resolved = await resolveSymbolOrCompanyName(rawInput, assetType);
     if (!resolved) {
       return NextResponse.json(
         {
-          error: `Could not find live market data for "${symbol}". Try the full Yahoo symbol (e.g. 4GLD.DE) or check the asset type.`,
+          error: `Could not find live market data for "${rawInput}". Try a ticker (e.g. AAPL) or company name (e.g. Apple).`,
         },
         { status: 400 },
       );
@@ -116,7 +113,10 @@ export async function POST(request: Request) {
         currency: newPurchaseCurrency,
       });
 
-      return NextResponse.json(holding);
+      return NextResponse.json({
+        ...holding,
+        companyName: resolved.companyName,
+      });
     }
 
     const holding = await db.holding.create({
@@ -144,7 +144,10 @@ export async function POST(request: Request) {
       currency: newPurchaseCurrency,
     });
 
-    return NextResponse.json(holding, { status: 201 });
+    return NextResponse.json(
+      { ...holding, companyName: resolved.companyName },
+      { status: 201 },
+    );
   } catch (error) {
     console.error("Failed to create holding:", error);
 

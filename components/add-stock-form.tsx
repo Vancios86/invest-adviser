@@ -14,10 +14,10 @@ type AddStockFormProps = {
 
 const ASSET_TYPE_OPTIONS: { value: AssetType; label: string; placeholder: string }[] =
   [
-    { value: "stock", label: "Stock", placeholder: "AAPL" },
-    { value: "commodity", label: "Commodity", placeholder: "4GLD" },
+    { value: "stock", label: "Stock", placeholder: "AAPL or Apple" },
+    { value: "commodity", label: "Commodity", placeholder: "4GLD or Xetra Gold" },
     { value: "etc", label: "ETC", placeholder: "8PSB" },
-    { value: "etf", label: "ETF", placeholder: "GLD" },
+    { value: "etf", label: "ETF", placeholder: "GLD or SPDR Gold" },
   ];
 
 const CURRENCY_OPTIONS: { value: PortfolioCurrency; label: string }[] = [
@@ -71,8 +71,12 @@ export function AddStockForm({ onAdded }: AddStockFormProps) {
 
       toast.success(
         response.status === 201
-          ? `${data.symbol} added to portfolio`
-          : `${data.symbol} merged — avg cost updated`,
+          ? data.companyName
+            ? `${data.symbol} (${data.companyName}) added to portfolio`
+            : `${data.symbol} added to portfolio`
+          : data.companyName
+            ? `${data.symbol} (${data.companyName}) merged — avg cost updated`
+            : `${data.symbol} merged — avg cost updated`,
       );
       setSymbol("");
       setShares("");
@@ -113,12 +117,12 @@ export function AddStockForm({ onAdded }: AddStockFormProps) {
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="symbol">Symbol</Label>
+            <Label htmlFor="symbol">Symbol or company</Label>
             <Input
               id="symbol"
               placeholder={selectedOption.placeholder}
               value={symbol}
-              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              onChange={(e) => setSymbol(e.target.value)}
               required
             />
           </div>

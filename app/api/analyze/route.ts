@@ -13,7 +13,7 @@ import {
 } from "@/lib/portfolio";
 import { fetchQuotes } from "@/lib/quotes";
 import { getQuoteSymbol } from "@/lib/holding-utils";
-import { isValidSymbolFormat } from "@/lib/symbols";
+import { parseAssetType, resolveSymbolOrCompanyName } from "@/lib/symbols";
 import {
   scoreStockTiming,
   WATCHLIST_TIMING_DISCLAIMER,
@@ -23,21 +23,43 @@ import type { PositionContext } from "@/lib/types";
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const symbol = String(body.symbol ?? "")
-      .trim()
-      .toUpperCase();
+    const rawInput = String(body.symbol ?? body.query ?? "").trim();
     const holdingId = body.holdingId ? String(body.holdingId) : undefined;
-
-    if (!symbol || !isValidSymbolFormat(symbol)) {
-      return NextResponse.json({ error: "Invalid symbol" }, { status: 400 });
-    }
 
     const holdingRecord = holdingId
       ? await db.holding.findUnique({ where: { id: holdingId } })
       : null;
-    const quoteSymbol = holdingRecord
-      ? getQuoteSymbol(holdingRecord)
-      : symbol;
+
+    let symbol: string;
+    let quoteSymbol: string;
+
+    if (holdingRecord) {
+      symbol = holdingRecord.symbol;
+      quoteSymbol = getQuoteSymbol(holdingRecord);
+    } else {
+      if (!rawInput) {
+        return NextResponse.json(
+          { error: "Enter a ticker symbol or company name" },
+          { status: 400 },
+        );
+      }
+
+      const resolved = await resolveSymbolOrCompanyName(
+        rawInput,
+        parseAssetType(body.assetType),
+      );
+      if (!resolved) {
+        return NextResponse.json(
+          {
+            error: `Could not find live market data for "${rawInput}". Try a ticker (e.g. NVDA) or company name (e.g. Apple).`,
+          },
+          { status: 400 },
+        );
+      }
+
+      symbol = resolved.symbol;
+      quoteSymbol = resolved.quoteSymbol;
+    }
 
     const holdings = await db.holding.findMany();
     const quoteSymbols = [

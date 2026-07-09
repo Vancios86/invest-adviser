@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
-  isValidSymbolFormat,
   parseAssetType,
-  resolveQuoteSymbol,
+  resolveSymbolOrCompanyName,
 } from "@/lib/symbols";
 
 export async function GET() {
@@ -39,14 +38,12 @@ function parseNote(value: unknown): string | null {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const symbol = String(body.symbol ?? "")
-      .trim()
-      .toUpperCase();
+    const rawInput = String(body.symbol ?? body.query ?? "").trim();
     const assetType = parseAssetType(body.assetType);
 
-    if (!symbol || !isValidSymbolFormat(symbol)) {
+    if (!rawInput) {
       return NextResponse.json(
-        { error: "Invalid symbol format" },
+        { error: "Enter a ticker symbol or company name" },
         { status: 400 },
       );
     }
@@ -62,11 +59,11 @@ export async function POST(request: Request) {
     }
     const note = parseNote(body.note);
 
-    const resolved = await resolveQuoteSymbol(symbol, assetType);
+    const resolved = await resolveSymbolOrCompanyName(rawInput, assetType);
     if (!resolved) {
       return NextResponse.json(
         {
-          error: `Could not find live market data for "${symbol}". Try the full Yahoo symbol (e.g. 4GLD.DE) or check the asset type.`,
+          error: `Could not find live market data for "${rawInput}". Try a ticker (e.g. NVDA) or company name (e.g. NVIDIA).`,
         },
         { status: 400 },
       );
