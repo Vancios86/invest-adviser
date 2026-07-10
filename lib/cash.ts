@@ -59,6 +59,19 @@ export async function addCashProceeds(
   return updateCashBalances({ cashUsd: current.cashUsd + amount });
 }
 
+export async function subtractCashProceeds(
+  amount: number,
+  currency: PortfolioCurrency,
+): Promise<CashBalances> {
+  const current = await getCashBalances();
+
+  if (currency === "EUR") {
+    return updateCashBalances({ cashEur: current.cashEur - amount });
+  }
+
+  return updateCashBalances({ cashUsd: current.cashUsd - amount });
+}
+
 export function computeAvailableCash(
   balances: CashBalances,
   eurUsdRate: number | null,

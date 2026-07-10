@@ -323,7 +323,10 @@ export function Dashboard() {
         onAnalyze={(holding) => openAnalysis(holding.symbol, holding)}
       />
 
-      <TransactionHistory transactions={transactions} />
+      <TransactionHistory
+        transactions={transactions}
+        onChanged={() => void refresh(false)}
+      />
 
       <StockAnalysisPanel
         open={analysisOpen}
