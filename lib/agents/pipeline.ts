@@ -362,7 +362,16 @@ function runRiskManager(context: AnalysisContext): AgentOutput {
   };
 }
 
-function synthesizeRecommendation(
+export const CORE_ANALYST_ROLES = [
+  "research",
+  "technical",
+  "news",
+  "risk",
+] as const satisfies readonly AgentRole[];
+
+export type CoreAnalystRole = (typeof CORE_ANALYST_ROLES)[number];
+
+export function synthesizeRecommendation(
   agents: AgentOutput[],
   context: AnalysisContext,
 ): { recommendation: Recommendation; confidence: number; summary: string } {
@@ -413,6 +422,13 @@ function synthesizeRecommendation(
     confidence: clamp(Math.abs(normalized)),
     summary,
   };
+}
+
+export function buildPortfolioManagerOutput(
+  agents: AgentOutput[],
+  synthesis: ReturnType<typeof synthesizeRecommendation>,
+): AgentOutput {
+  return runPortfolioManager(agents, synthesis);
 }
 
 function runPortfolioManager(

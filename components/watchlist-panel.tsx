@@ -118,47 +118,25 @@ function BuyVolumeDisplay({
   );
 }
 
-function TargetDistance({
-  targetPrice,
-  livePrice,
-  currency,
-}: {
-  targetPrice: number | null;
-  livePrice: number | null;
-  currency: string;
-}) {
-  if (targetPrice === null) {
-    return <span className="text-xs text-muted-foreground">No target</span>;
-  }
+function buildTargetTooltip(
+  targetPrice: number | null,
+  livePrice: number | null,
+  currency: string,
+): string | undefined {
+  if (targetPrice === null) return undefined;
 
   if (livePrice === null) {
-    return (
-      <span className="text-xs text-muted-foreground">
-        Target {formatPrice(targetPrice, currency)}
-      </span>
-    );
+    return `Target ${formatPrice(targetPrice, currency)}`;
   }
 
   const diffPct = ((livePrice - targetPrice) / targetPrice) * 100;
   const atOrBelow = diffPct <= 0;
 
-  return (
-    <div className="text-xs">
-      <span className="text-muted-foreground">
-        Target {formatPrice(targetPrice, currency)}
-      </span>
-      <span
-        className={cn(
-          "ml-1 font-medium",
-          atOrBelow ? "text-green-500" : "text-amber-400",
-        )}
-      >
-        {atOrBelow
-          ? `· entry zone (${formatPercent(diffPct)})`
-          : `· ${diffPct.toFixed(1)}% above`}
-      </span>
-    </div>
-  );
+  if (atOrBelow) {
+    return `Target ${formatPrice(targetPrice, currency)} · entry zone (${formatPercent(diffPct)})`;
+  }
+
+  return `Target ${formatPrice(targetPrice, currency)} · ${diffPct.toFixed(1)}% above`;
 }
 
 export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelProps) {
@@ -376,7 +354,6 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
               <div className="w-[5.5rem] text-right">Price</div>
               <div className="min-w-[7rem] text-right">Rel. vol</div>
               <div className="min-w-[5.5rem] text-right">Buy/sell</div>
-              <div className="min-w-[10rem]">Target</div>
               <div className="w-[4.5rem]" />
             </div>
             {items.map((item) => {
@@ -384,13 +361,24 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
               const livePrice = quote?.price ?? null;
               const currency = quote?.currency ?? "USD";
               const dayChange = quote?.changePercent ?? null;
+              const targetTooltip = buildTargetTooltip(
+                item.targetPrice,
+                livePrice,
+                currency,
+              );
 
               return (
                 <div
                   key={item.id}
                   className="flex flex-wrap items-center gap-3 rounded-lg border px-3 py-2"
                 >
-                  <div className="min-w-[8rem] flex-1">
+                  <div
+                    className={cn(
+                      "min-w-[8rem] flex-1",
+                      targetTooltip && "cursor-help",
+                    )}
+                    title={targetTooltip}
+                  >
                     <div className="flex items-center gap-2">
                       <span className="font-semibold">{item.symbol}</span>
                       {item.companyName && (
@@ -436,14 +424,6 @@ export function WatchlistPanel({ onAnalyze, refreshToken = 0 }: WatchlistPanelPr
                   <div className="min-w-[5.5rem]">
                     <BuyVolumeDisplay
                       buyVolumePct={buyVolumePctBySymbol[quoteKey(item)]}
-                    />
-                  </div>
-
-                  <div className="min-w-[10rem]">
-                    <TargetDistance
-                      targetPrice={item.targetPrice}
-                      livePrice={livePrice}
-                      currency={currency}
                     />
                   </div>
 
