@@ -15,7 +15,6 @@ export async function GET() {
     ]);
 
     const baseline = runBoardPipeline(snapshot);
-    const report = await runBoardWithGemini(baseline);
 
     const timingUniverse = mergeTimingUniverse(
       watchlistItems.map((item) => ({
@@ -32,11 +31,13 @@ export async function GET() {
 
     const watchlistTiming = await buildWatchlistTimingReport(
       timingUniverse,
-      report.regime,
+      baseline.regime,
       fetchIndicators,
     );
 
-    return NextResponse.json({ ...report, watchlistTiming });
+    const report = await runBoardWithGemini({ ...baseline, watchlistTiming });
+
+    return NextResponse.json(report);
   } catch (error) {
     console.error("Failed to run market board:", error);
     return NextResponse.json(

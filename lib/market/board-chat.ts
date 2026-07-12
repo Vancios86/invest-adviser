@@ -287,8 +287,8 @@ async function fetchSymbolResearch(symbols: string[]) {
 
 function buildBoardChatSystemPrompt(memberRole?: BoardRole): string {
   const persona = memberRole
-    ? `Respond primarily as the ${BOARD_DEFINITIONS[memberRole].displayName} (${BOARD_DEFINITIONS[memberRole].mandate}). Draw on your desk's lens while staying grounded in the shared data.`
-    : `You are the full Board of Advisers — a panel of macro, sector, flow, news, and strategy specialists helping a self-directed retail investor discuss markets and research ideas.`;
+    ? `Respond primarily as the ${BOARD_DEFINITIONS[memberRole].displayName} (${BOARD_DEFINITIONS[memberRole].mandate}). Draw on your desk's lens while staying grounded in the shared data. When other desks disagree with yours, acknowledge the tension honestly rather than overstating consensus.`
+    : `You are the full Board of Advisers — a panel of macro, sector rotation, flow, news, and strategy specialists helping a self-directed retail investor discuss markets and research ideas. When desks disagree, say so clearly and explain what each side is seeing.`;
 
   return `${persona}
 
@@ -304,8 +304,9 @@ const CHAT_GUARDRAILS = `Rules:
 - Do not mention "briefing", "snapshot", "research bundle", "symbolResearch", field names, or how data was fetched.
 - Use company names alongside tickers when available.
 - Ground every answer in the supplied data; do not invent prices, levels, events, analyst names, or institution names.
+- When watchlist or portfolio timing data is present, connect your answer to those names when the user asks about entries or specific stocks.
 - If the user asks about a symbol without fresh research data, say you need the ticker and offer to look it up.
-- Be concise and practical — like a research desk conversation, not a data dump.
+- Be concise and practical — like a research desk conversation, not a data dump. Challenge weak theses politely when data does not support them.
 - This is informational discussion, not personalized financial advice.`;
 
 function humanizeBoardChatReply(text: string): string {

@@ -331,7 +331,16 @@ function runGeopolitical(snapshot: MarketSnapshot): BoardMemberOutput {
   };
 }
 
-function regimeFromMembers(members: BoardMemberOutput[]): {
+export const CORE_BOARD_ROLES = [
+  "macro",
+  "sector_rotation",
+  "institutional_flow",
+  "geopolitical",
+] as const satisfies readonly BoardRole[];
+
+export type CoreBoardRole = (typeof CORE_BOARD_ROLES)[number];
+
+export function regimeFromMembers(members: BoardMemberOutput[]): {
   regime: MarketRegime;
   confidence: number;
 } {
@@ -350,6 +359,15 @@ function regimeFromMembers(members: BoardMemberOutput[]): {
   else if (normalized < -0.25) regime = "risk_off";
 
   return { regime, confidence: clamp(0.5 + Math.abs(normalized) * 0.4) };
+}
+
+export function buildChiefStrategistOutput(
+  snapshot: MarketSnapshot,
+  members: BoardMemberOutput[],
+  regime: MarketRegime,
+  confidence: number,
+): BoardMemberOutput {
+  return runChiefStrategist(snapshot, members, regime, confidence);
 }
 
 function runChiefStrategist(
@@ -411,6 +429,14 @@ function runChiefStrategist(
     keyPoints,
     watchItems: watchItems.slice(0, 5),
   };
+}
+
+export function buildBoardExecutiveSummary(
+  regime: MarketRegime,
+  confidence: number,
+  members: BoardMemberOutput[],
+): string {
+  return buildExecutiveSummary(regime, confidence, members);
 }
 
 function buildExecutiveSummary(
