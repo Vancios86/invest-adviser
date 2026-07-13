@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deductCashForPurchase, getCashBalances, InsufficientCashError } from "@/lib/cash";
 import { db } from "@/lib/db";
 import {
   defaultPurchaseCurrency,
@@ -68,6 +69,9 @@ export async function POST(request: Request) {
       purchaseCurrency ??
       defaultPurchaseCurrency(resolved.assetType, resolved.currency);
 
+    const purchaseCost = shares * purchasePrice;
+    await deductCashForPurchase(purchaseCost, newPurchaseCurrency);
+
     const existing = await db.holding.findFirst({
       where: { symbol: resolved.symbol },
       orderBy: { createdAt: "asc" },
@@ -113,9 +117,12 @@ export async function POST(request: Request) {
         currency: newPurchaseCurrency,
       });
 
+      const cash = await getCashBalances();
+
       return NextResponse.json({
         ...holding,
         companyName: resolved.companyName,
+        cash,
       });
     }
 
@@ -144,12 +151,18 @@ export async function POST(request: Request) {
       currency: newPurchaseCurrency,
     });
 
+    const cash = await getCashBalances();
+
     return NextResponse.json(
-      { ...holding, companyName: resolved.companyName },
+      { ...holding, companyName: resolved.companyName, cash },
       { status: 201 },
     );
   } catch (error) {
     console.error("Failed to create holding:", error);
+
+    if (error instanceof InsufficientCashError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
 
     const message =
       error instanceof Error &&

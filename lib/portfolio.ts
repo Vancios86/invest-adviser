@@ -1,4 +1,4 @@
-import { convertAmount, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
+import { INITIAL_CAPITAL_EUR, convertAmount, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
 import { getQuoteSymbol } from "@/lib/holding-utils";
 import {
   computeRelativeVolume,
@@ -361,7 +361,6 @@ export function computePortfolioSummary(
   holdings: HoldingWithQuote[],
   eurUsdRate: number | null,
   cash: { cashUsd: number; cashEur: number } = { cashUsd: 0, cashEur: 0 },
-  realizedGainLoss = 0,
 ): PortfolioSummary {
   const currency = resolveSummaryCurrency();
   const hasUsdHoldings = holdings.some(
@@ -383,22 +382,6 @@ export function computePortfolioSummary(
     );
   }, 0);
 
-  const totalCostBasis = holdings.reduce((sum, holding) => {
-    return (
-      sum +
-      convertAmount(
-        holding.costBasis,
-        holding.purchaseCurrency,
-        currency,
-        eurUsdRate,
-      )
-    );
-  }, 0);
-
-  const totalGainLossAbs = totalValue - totalCostBasis;
-  const totalGainLossPct =
-    totalCostBasis > 0 ? (totalGainLossAbs / totalCostBasis) * 100 : 0;
-
   const cashUsdInSummary = convertAmount(
     cash.cashUsd,
     "USD",
@@ -413,15 +396,19 @@ export function computePortfolioSummary(
   );
   const availableCash = cashUsdInSummary + cashEurInSummary;
   const totalNetWorth = totalValue + availableCash;
+  const gainLossAbs = totalNetWorth - INITIAL_CAPITAL_EUR;
+  const gainLossPct =
+    INITIAL_CAPITAL_EUR > 0
+      ? (gainLossAbs / INITIAL_CAPITAL_EUR) * 100
+      : 0;
 
   return {
     totalValue,
-    totalCostBasis,
-    totalGainLossAbs,
-    totalGainLossPct,
     availableCash,
     totalNetWorth,
-    realizedGainLoss,
+    initialCapital: INITIAL_CAPITAL_EUR,
+    gainLossAbs,
+    gainLossPct,
     cashUsd: cash.cashUsd,
     cashEur: cash.cashEur,
     currency,

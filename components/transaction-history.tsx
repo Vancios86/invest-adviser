@@ -36,7 +36,7 @@ function deleteConfirmMessage(tx: TransactionRecord): string {
   if (tx.type === "sell") {
     return `Delete this sell of ${tx.shares} ${tx.symbol}? Sale proceeds will be removed from cash and the shares will be added back to your portfolio.`;
   }
-  return `Remove this buy record for ${tx.symbol}? Your holdings will not change — only the history entry is deleted.`;
+  return `Remove this buy record for ${tx.symbol}? Purchase cost will be refunded to cash. Holdings are not changed.`;
 }
 
 export function TransactionHistory({
@@ -61,7 +61,7 @@ export function TransactionHistory({
       toast.success(
         tx.type === "sell"
           ? `${tx.symbol} sell removed — cash and holdings updated`
-          : `${tx.symbol} buy removed from history`,
+          : `${tx.symbol} buy removed — purchase cost refunded to cash`,
       );
       onChanged?.();
     } catch (error) {

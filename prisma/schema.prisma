@@ -24,7 +24,7 @@ model Holding {
 model PortfolioSettings {
   id        String   @id @default("default")
   cashUsd   Float    @default(0)
-  cashEur   Float    @default(0)
+  cashEur   Float    @default(60000)
   updatedAt DateTime @updatedAt
 }
 

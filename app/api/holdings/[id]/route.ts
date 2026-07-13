@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { addCashProceeds } from "@/lib/cash";
 import {
   defaultPurchaseCurrency,
   parsePurchaseCurrency,
 } from "@/lib/currency-utils";
+import { db } from "@/lib/db";
 import {
   parseAssetType,
   resolveSymbolOrCompanyName,
@@ -116,8 +117,14 @@ export async function DELETE(_request: Request, context: RouteContext) {
       return NextResponse.json({ error: "Holding not found" }, { status: 404 });
     }
 
+    const purchaseCurrency = parsePurchaseCurrency(existing.purchaseCurrency);
+    const refundAmount = existing.shares * existing.purchasePrice;
+
     await db.holding.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+
+    const cash = await addCashProceeds(refundAmount, purchaseCurrency);
+
+    return NextResponse.json({ success: true, cash });
   } catch (error) {
     console.error("Failed to delete holding:", error);
     return NextResponse.json(

@@ -4,6 +4,8 @@ export const SUPPORTED_CURRENCIES: PortfolioCurrency[] = ["USD", "EUR"];
 
 export const PORTFOLIO_BASE_CURRENCY: PortfolioCurrency = "EUR";
 
+export const INITIAL_CAPITAL_EUR = 60_000;
+
 export function parsePurchaseCurrency(value: unknown): PortfolioCurrency {
   const normalized = String(value ?? "USD").toUpperCase();
   if (normalized === "EUR") return "EUR";

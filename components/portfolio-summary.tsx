@@ -14,10 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  formatCurrency,
-  formatPercent,
-} from "@/lib/portfolio";
+import { formatCurrency, formatPercent } from "@/lib/portfolio";
 import type { PortfolioSummary as PortfolioSummaryType } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -34,8 +31,7 @@ export function PortfolioSummary({
   quotedCount,
   onCashUpdated,
 }: PortfolioSummaryProps) {
-  const isPositive = summary.totalGainLossAbs >= 0;
-  const realizedPositive = summary.realizedGainLoss >= 0;
+  const isPositive = summary.gainLossAbs >= 0;
   const [cashOpen, setCashOpen] = useState(false);
   const [cashUsd, setCashUsd] = useState("");
   const [cashEur, setCashEur] = useState("");
@@ -76,7 +72,7 @@ export function PortfolioSummary({
 
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-primary/30 bg-primary/5">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -88,7 +84,11 @@ export function PortfolioSummary({
               {formatCurrency(summary.totalNetWorth, summary.currency)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              Portfolio + available cash
+              Portfolio value + available cash
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Starting capital{" "}
+              {formatCurrency(summary.initialCapital, summary.currency)}
             </p>
           </CardContent>
         </Card>
@@ -134,7 +134,7 @@ export function PortfolioSummary({
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
               {formatCurrency(summary.cashUsd, "USD")} +{" "}
-              {formatCurrency(summary.cashEur, "EUR")} · ready to deploy
+              {formatCurrency(summary.cashEur, "EUR")} · buys deduct, sells add
             </p>
           </CardContent>
         </Card>
@@ -142,20 +142,7 @@ export function PortfolioSummary({
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Cost basis
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">
-              {formatCurrency(summary.totalCostBasis, summary.currency)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Unrealized gain / loss
+              Gain / loss
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -165,46 +152,19 @@ export function PortfolioSummary({
                 isPositive ? "text-green-500" : "text-red-500",
               )}
             >
-              {formatCurrency(summary.totalGainLossAbs, summary.currency)}
+              {formatCurrency(summary.gainLossAbs, summary.currency)}
             </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Unrealized return
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
             <p
               className={cn(
-                "text-2xl font-semibold",
+                "mt-1 text-sm font-medium",
                 isPositive ? "text-green-500" : "text-red-500",
               )}
             >
-              {formatPercent(summary.totalGainLossPct)}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Realized gain / loss
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p
-              className={cn(
-                "text-2xl font-semibold",
-                realizedPositive ? "text-green-500" : "text-red-500",
-              )}
-            >
-              {formatCurrency(summary.realizedGainLoss, summary.currency)}
+              {formatPercent(summary.gainLossPct)}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              From closed positions (sells)
+              vs starting capital of{" "}
+              {formatCurrency(summary.initialCapital, summary.currency)}
             </p>
           </CardContent>
         </Card>
@@ -219,8 +179,8 @@ export function PortfolioSummary({
             </DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            Set cash you have ready to invest. Sale proceeds are added here
-            automatically when you record a sell.
+            Cash ready to invest. New buys deduct the purchase cost here;
+            recorded sells add proceeds automatically.
           </p>
           <div className="grid gap-4 py-2 sm:grid-cols-2">
             <div className="space-y-2">

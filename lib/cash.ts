@@ -1,4 +1,4 @@
-import { convertAmount, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
+import { convertAmount, INITIAL_CAPITAL_EUR, PORTFOLIO_BASE_CURRENCY } from "@/lib/currency-utils";
 import { db } from "@/lib/db";
 import type { PortfolioCurrency } from "@/lib/types";
 
@@ -7,6 +7,19 @@ export type CashBalances = {
   cashEur: number;
 };
 
+export class InsufficientCashError extends Error {
+  constructor(
+    public readonly required: number,
+    public readonly available: number,
+    public readonly currency: PortfolioCurrency,
+  ) {
+    super(
+      `Insufficient ${currency} cash: need ${required.toFixed(2)}, have ${available.toFixed(2)}`,
+    );
+    this.name = "InsufficientCashError";
+  }
+}
+
 export async function getCashBalances(): Promise<CashBalances> {
   const settings = await db.portfolioSettings.findUnique({
     where: { id: "default" },
@@ -14,7 +27,7 @@ export async function getCashBalances(): Promise<CashBalances> {
 
   if (!settings) {
     const created = await db.portfolioSettings.create({
-      data: { id: "default" },
+      data: { id: "default", cashEur: INITIAL_CAPITAL_EUR },
     });
     return { cashUsd: created.cashUsd, cashEur: created.cashEur };
   }
@@ -66,10 +79,24 @@ export async function subtractCashProceeds(
   const current = await getCashBalances();
 
   if (currency === "EUR") {
+    if (current.cashEur < amount) {
+      throw new InsufficientCashError(amount, current.cashEur, "EUR");
+    }
     return updateCashBalances({ cashEur: current.cashEur - amount });
   }
 
+  if (current.cashUsd < amount) {
+    throw new InsufficientCashError(amount, current.cashUsd, "USD");
+  }
+
   return updateCashBalances({ cashUsd: current.cashUsd - amount });
+}
+
+export async function deductCashForPurchase(
+  amount: number,
+  currency: PortfolioCurrency,
+): Promise<CashBalances> {
+  return subtractCashProceeds(amount, currency);
 }
 
 export function computeAvailableCash(

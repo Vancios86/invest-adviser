@@ -45,7 +45,6 @@ export function Dashboard() {
   const [watchlistRefreshToken, setWatchlistRefreshToken] = useState(0);
   const [cash, setCash] = useState({ cashUsd: 0, cashEur: 0 });
   const [transactions, setTransactions] = useState<TransactionRecord[]>([]);
-  const [realizedGainLoss, setRealizedGainLoss] = useState(0);
 
   function openAnalysis(symbol: string, holding?: HoldingWithQuote) {
     setAnalysisSymbol(symbol);
@@ -111,10 +110,8 @@ export function Dashboard() {
     if (txResponse.ok) {
       const txData = (await txResponse.json()) as {
         transactions: TransactionRecord[];
-        realizedGainLoss: number;
       };
       setTransactions(txData.transactions);
-      setRealizedGainLoss(txData.realizedGainLoss);
     }
   }, []);
 
@@ -194,14 +191,8 @@ export function Dashboard() {
   );
 
   const summary = useMemo(
-    () =>
-      computePortfolioSummary(
-        enrichedHoldings,
-        eurUsdRate,
-        cash,
-        realizedGainLoss,
-      ),
-    [enrichedHoldings, eurUsdRate, cash, realizedGainLoss],
+    () => computePortfolioSummary(enrichedHoldings, eurUsdRate, cash),
+    [enrichedHoldings, eurUsdRate, cash],
   );
 
   const hasPortfolioOverview =

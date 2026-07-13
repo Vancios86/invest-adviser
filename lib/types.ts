@@ -53,12 +53,11 @@ export type AggregatedBubble = {
 
 export type PortfolioSummary = {
   totalValue: number;
-  totalCostBasis: number;
-  totalGainLossAbs: number;
-  totalGainLossPct: number;
   availableCash: number;
   totalNetWorth: number;
-  realizedGainLoss: number;
+  initialCapital: number;
+  gainLossAbs: number;
+  gainLossPct: number;
   cashUsd: number;
   cashEur: number;
   currency: PortfolioCurrency;

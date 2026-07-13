@@ -1,5 +1,5 @@
 import { convertAmount, parsePurchaseCurrency } from "@/lib/currency-utils";
-import { subtractCashProceeds, type CashBalances } from "@/lib/cash";
+import { addCashProceeds, subtractCashProceeds, type CashBalances } from "@/lib/cash";
 import { fetchEurUsdRate } from "@/lib/currency";
 import { db } from "@/lib/db";
 import { mergePurchaseLots } from "@/lib/holding-utils";
@@ -210,6 +210,11 @@ export async function deleteTransaction(
     );
     await restoreSharesFromSell(tx);
     restoredHolding = true;
+  } else {
+    cash = await addCashProceeds(
+      tx.amount,
+      parsePurchaseCurrency(tx.currency),
+    );
   }
 
   await db.transaction.delete({ where: { id } });
