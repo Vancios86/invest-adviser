@@ -221,6 +221,28 @@ export type AnalysisReport = {
   companyIntro?: string;
   timing?: WatchlistTimingEntry;
   timingDisclaimer?: string;
+  sectorMacro?: SectorMacroSnapshot;
+};
+
+export type SectorFlowSignal = "accumulation" | "distribution" | "neutral";
+
+export type SectorMacroSnapshot = {
+  companySector: string | null;
+  companyIndustry: string | null;
+  matchedSector: string | null;
+  etfSymbol: string | null;
+  etfName: string | null;
+  changePercent: number | null;
+  relativeVolume: number | null;
+  flowSignal: SectorFlowSignal;
+  sectorRank: number | null;
+  sectorsTotal: number;
+  cyclical: boolean | null;
+  headline: string;
+  summary: string;
+  rotationNote: string | null;
+  disclaimer: string;
+  fetchedAt: string;
 };
 
 // --- Market Board of Advisers (market-wide analysis) ---

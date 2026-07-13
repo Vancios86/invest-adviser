@@ -35,6 +35,7 @@ import type {
   StockDataBundle,
 } from "@/lib/types";
 import { TimingAnalysisCard } from "@/components/timing-analysis-card";
+import { SectorMacroCard } from "@/components/sector-macro-card";
 import { cn } from "@/lib/utils";
 
 type StockAnalysisPanelProps = {
@@ -258,6 +259,10 @@ export function StockAnalysisPanel({
                   </p>
                 </CardContent>
               </Card>
+            )}
+
+            {result.sectorMacro && (
+              <SectorMacroCard snapshot={result.sectorMacro} />
             )}
 
             {result.timing && (

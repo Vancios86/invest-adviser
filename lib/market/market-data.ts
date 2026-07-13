@@ -1,6 +1,7 @@
 import { yahooFinance } from "@/lib/yahoo";
 import { ANALYSIS_CACHE_TTL_MS, getCached, setCached } from "@/lib/cache";
 import { fetchMarketNews } from "@/lib/news";
+import { flowSignalFor, SECTOR_ETF_DEFS } from "@/lib/market/sector-flow";
 import type {
   MarketBreadth,
   MarketInstrument,
@@ -35,36 +36,8 @@ const MACRO_DEFS: { symbol: string; name: string }[] = [
   { symbol: "BTC-USD", name: "Bitcoin" },
 ];
 
-// SPDR sector ETFs are widely used proxies for sector performance and flows.
-const SECTOR_DEFS: { symbol: string; sector: string; cyclical: boolean }[] = [
-  { symbol: "XLK", sector: "Technology", cyclical: true },
-  { symbol: "XLY", sector: "Consumer Discretionary", cyclical: true },
-  { symbol: "XLF", sector: "Financials", cyclical: true },
-  { symbol: "XLI", sector: "Industrials", cyclical: true },
-  { symbol: "XLB", sector: "Materials", cyclical: true },
-  { symbol: "XLE", sector: "Energy", cyclical: true },
-  { symbol: "XLC", sector: "Communication Services", cyclical: true },
-  { symbol: "XLRE", sector: "Real Estate", cyclical: false },
-  { symbol: "XLV", sector: "Health Care", cyclical: false },
-  { symbol: "XLP", sector: "Consumer Staples", cyclical: false },
-  { symbol: "XLU", sector: "Utilities", cyclical: false },
-];
-
 function num(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function flowSignalFor(
-  changePercent: number | null,
-  relativeVolume: number | null,
-): SectorPerformance["flowSignal"] {
-  if (changePercent === null || relativeVolume === null) return "neutral";
-  // Elevated participation confirms the day's direction (a flow proxy).
-  if (relativeVolume >= 1.15) {
-    if (changePercent > 0.25) return "accumulation";
-    if (changePercent < -0.25) return "distribution";
-  }
-  return "neutral";
 }
 
 async function quoteMany(
@@ -136,7 +109,7 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
     ...INDEX_DEFS.map((d) => d.symbol),
     VIX_DEF.symbol,
     ...MACRO_DEFS.map((d) => d.symbol),
-    ...SECTOR_DEFS.map((d) => d.symbol),
+    ...SECTOR_ETF_DEFS.map((d) => d.symbol),
   ];
 
   const [quotes, news] = await Promise.all([
@@ -155,7 +128,7 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
     toInstrument(def, quotes.get(def.symbol.toUpperCase())),
   );
 
-  const sectors: SectorPerformance[] = SECTOR_DEFS.map((def) => {
+  const sectors: SectorPerformance[] = SECTOR_ETF_DEFS.map((def) => {
     const quote = quotes.get(def.symbol.toUpperCase());
     const changePercent = num(quote?.regularMarketChangePercent);
     const volume = num(quote?.regularMarketVolume);
@@ -188,4 +161,4 @@ export async function fetchMarketSnapshot(): Promise<MarketSnapshot> {
   return snapshot;
 }
 
-export { SECTOR_DEFS };
+export { SECTOR_ETF_DEFS as SECTOR_DEFS };

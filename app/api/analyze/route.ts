@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { runAnalysisPipeline } from "@/lib/agents/pipeline";
 import { buildCompanyIntro } from "@/lib/analysis/company-intro";
+import {
+  buildSectorMacroSnapshot,
+} from "@/lib/analysis/sector-macro";
 import { fetchEurUsdRate } from "@/lib/currency";
 import { fetchStockData } from "@/lib/analysis-data";
 import { db } from "@/lib/db";
 import { runAnalysisWithGemini } from "@/lib/llm/gemini";
+import { fetchMarketSnapshot } from "@/lib/market/market-data";
 import { getMarketRegime } from "@/lib/market/regime";
 import {
   aggregatePositionFromHoldings,
@@ -69,13 +73,14 @@ export async function POST(request: Request) {
       ]),
     ];
 
-    const [data, quotes, eurUsdRate, regimeContext, watchlistItem] =
+    const [data, quotes, eurUsdRate, regimeContext, watchlistItem, marketSnapshot] =
       await Promise.all([
       fetchStockData(quoteSymbol),
       fetchQuotes(quoteSymbols),
       fetchEurUsdRate(),
       getMarketRegime(),
       db.watchlistItem.findFirst({ where: { symbol } }),
+      fetchMarketSnapshot(),
     ]);
 
     const enriched = enrichHoldings(holdings, quotes, eurUsdRate);
@@ -127,6 +132,11 @@ export async function POST(request: Request) {
     );
 
     const companyIntro = buildCompanyIntro(data.financials);
+    const sectorMacro = buildSectorMacroSnapshot({
+      sector: data.financials.sector,
+      industry: data.financials.industry,
+      marketSnapshot,
+    });
     const timing = scoreStockTiming({
       symbol,
       quoteSymbol,
@@ -139,6 +149,7 @@ export async function POST(request: Request) {
     const enrichedReport = {
       ...report,
       companyIntro,
+      sectorMacro,
       timing,
       timingDisclaimer: WATCHLIST_TIMING_DISCLAIMER,
     };
